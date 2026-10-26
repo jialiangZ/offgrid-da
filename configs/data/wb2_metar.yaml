@@ -1,0 +1,48 @@
+# WeatherBench 2 data sources (all public, anonymous GCS access)
+data:
+  # Pangu forecasts on 240x121 equiangular grid with poles (conservative regrid)
+  pangu:
+    url: "gs://weatherbench2/datasets/pangu/2018-2022_0012_240x121_equiangular_with_poles_conservative.zarr"
+    # Verified in Phase 0 audit; see docs/DATA_AUDIT.md
+  # ERA5 analysis reference on the same 240x121 grid
+  era5:
+    url: "gs://weatherbench2/datasets/era5/1959-2023_01_10-6h-240x121_equiangular_with_poles_conservative.zarr"
+  # MADIS METAR station observations as parquet
+  metar:
+    url: "gs://weatherbench2/datasets/metar/"
+    # Available layouts (verified via bucket listing):
+    #   metar-timeObs-by-hour_2001-07-01T00_2024-01-01T00   (rows keyed by observation time)
+    #   metar-timeNominal-by-hour / -by-day / -by-month      (rows keyed by nominal report hour)
+    layout: "metar-timeObs-by-hour_2001-07-01T00_2024-01-01T00"
+    # layout: "metar-timeNominal-by-day"
+
+  # Local cache root for monthly parquet/npz caches (created on demand)
+  cache_dir: "outputs/cache"
+
+# Time configuration for single-cycle samples
+time:
+  lead_time_hours: 6        # Pangu forecast lead used as background
+  analysis_interval_hours: 6
+  # Observation window (relative to analysis/valid time), see plan section 3.4
+  observation_window_minutes: 60
+  analysis_latency_minutes: 30
+
+# Variable selection (names verified against real zarr schemas in Phase 0)
+variables:
+  target_variables: ["2m_temperature"]
+  background_variables: ["2m_temperature"]
+  era5_reference_variables: ["2m_temperature"]
+
+# Splits (plan section 3.2). Stage-1 minimal pipeline uses only Jan 2020.
+splits:
+  train: {"start": "2018-01-01", "end": "2020-12-31"}
+  val:   {"start": "2021-01-01", "end": "2021-12-31"}
+  test:  {"start": "2022-01-01", "end": "2022-12-31"}
+
+# Minimal first-round sample window (plan section 12, Task 3)
+minimal_window: {"start": "2020-01-01", "end": "2020-01-31"}
+
+station_split:
+  context_fraction: 0.8
+  heldout_fraction: 0.2
+  seed: 42

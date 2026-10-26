@@ -1,0 +1,40 @@
+[project]
+name = "offgrid-da"
+version = "0.1.0"
+description = "Background-Aware Off-Grid Observation Assimilation (WeatherBench2 Pangu + ERA5 + MADIS METAR)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "torch>=2.6",
+    "xarray>=2025.1",
+    "zarr>=3.0",
+    "dask[complete]",
+    "gcsfs",
+    "fsspec",
+    "pandas",
+    "pyarrow",
+    "numpy",
+    "scipy",
+    "scikit-learn",
+    "pyyaml",
+    "matplotlib",
+    "tensorboard",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-timeout"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "requires_gcs: tests that need network access to gs://weatherbench2",
+]
