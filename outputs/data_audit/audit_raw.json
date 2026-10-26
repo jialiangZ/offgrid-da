@@ -1,0 +1,337 @@
+{
+  "pangu": {
+    "dims": {
+      "time": 3652,
+      "prediction_timedelta": 40,
+      "longitude": 240,
+      "latitude": 121,
+      "level": 13
+    },
+    "n_vars": 11,
+    "variables": [
+      "10m_u_component_of_wind",
+      "10m_v_component_of_wind",
+      "10m_wind_speed",
+      "2m_temperature",
+      "geopotential",
+      "mean_sea_level_pressure",
+      "specific_humidity",
+      "temperature",
+      "u_component_of_wind",
+      "v_component_of_wind",
+      "wind_speed"
+    ],
+    "coord_names": [
+      "latitude",
+      "level",
+      "longitude",
+      "prediction_timedelta",
+      "time"
+    ],
+    "lead_coordinate": "prediction_timedelta",
+    "lead_hours": [
+      6,
+      12,
+      18,
+      24,
+      30,
+      36,
+      42,
+      48,
+      54,
+      60,
+      66,
+      72,
+      78,
+      84,
+      90,
+      96,
+      102,
+      108,
+      114,
+      120,
+      126,
+      132,
+      138,
+      144,
+      150,
+      156,
+      162,
+      168,
+      174,
+      180,
+      186,
+      192,
+      198,
+      204,
+      210,
+      216,
+      222,
+      228,
+      234,
+      240
+    ],
+    "has_6h_lead": true,
+    "init_times": [
+      "2018-01-01T00:00",
+      "2022-12-31T12:00",
+      3652
+    ],
+    "init_hours": [
+      0,
+      12
+    ],
+    "grid": {
+      "n_lat": 121,
+      "n_lon": 240,
+      "lat_min": -90.0,
+      "lat_max": 90.0,
+      "lon_min": 0.0,
+      "lon_max": 358.5,
+      "dlat": 1.5000000000000426,
+      "dlon": 1.5,
+      "poles_included": true
+    },
+    "native_dim_order": "(time, prediction_timedelta, longitude, latitude)",
+    "units_attrs_present": false,
+    "sample_field_stats": {
+      "shape": [
+        121,
+        240
+      ],
+      "nan_count": 0,
+      "min": 227.00637817382812,
+      "max": 317.4380187988281,
+      "mean": 277.3295593261719
+    }
+  },
+  "era5": {
+    "dims": {
+      "time": 93544,
+      "longitude": 240,
+      "latitude": 121,
+      "level": 13
+    },
+    "n_vars": 62,
+    "time_range": [
+      "1959-01-01T00:00",
+      "2023-01-10T18:00",
+      93544
+    ],
+    "time_hours_utc": [
+      0,
+      6,
+      12,
+      18
+    ],
+    "expected_step_hours": 6,
+    "variable_intersection_with_pangu": [
+      "10m_u_component_of_wind",
+      "10m_v_component_of_wind",
+      "10m_wind_speed",
+      "2m_temperature",
+      "geopotential",
+      "mean_sea_level_pressure",
+      "specific_humidity",
+      "temperature",
+      "u_component_of_wind",
+      "v_component_of_wind",
+      "wind_speed"
+    ],
+    "key_units": {
+      "2m_temperature": "K",
+      "10m_u_component_of_wind": "m s**-1",
+      "mean_sea_level_pressure": "Pa"
+    },
+    "grid": {
+      "n_lat": 121,
+      "n_lon": 240,
+      "lat_min": -90.0,
+      "lat_max": 90.0,
+      "lon_min": 0.0,
+      "lon_max": 358.5,
+      "same_layout_as_pangu": true
+    },
+    "sample_field_stats": {
+      "shape": [
+        121,
+        240
+      ],
+      "nan_count": 0,
+      "min": 225.1815185546875,
+      "max": 317.9371032714844,
+      "mean": 277.30999755859375
+    }
+  },
+  "time_matching": {
+    "minimal_window": {
+      "start": "2020-01-01",
+      "end": "2020-01-31",
+      "n_samples": 60,
+      "first_valid": "2020-01-01T06:00",
+      "last_valid": "2020-01-30T18:00",
+      "valid_hours": [
+        6,
+        18
+      ]
+    },
+    "spans": {
+      "train": {
+        "start": "2018-01-01",
+        "end": "2020-12-31",
+        "n_samples": 2190,
+        "expected_max": 2189
+      },
+      "val": {
+        "start": "2021-01-01",
+        "end": "2021-12-31",
+        "n_samples": 728,
+        "expected_max": 727
+      },
+      "test": {
+        "start": "2022-01-01",
+        "end": "2022-12-31",
+        "n_samples": 728,
+        "expected_max": 727
+      }
+    },
+    "index_columns": [
+      "sample_id",
+      "init_time",
+      "lead_time_hours",
+      "valid_time",
+      "forecast_index",
+      "analysis_index",
+      "observation_window_start",
+      "observation_window_end"
+    ],
+    "rule": "valid_time = init_time(00/12Z) + 6h => analysis hours 06/18 UTC (all present in ERA5)"
+  },
+  "metar": {
+    "layout": "metar-timeObs-by-hour_2001-07-01T00_2024-01-01T00",
+    "partition_path": "year=YYYY/month=M/day=D/hour=H/YYYY-MM-DDTHH.parquet",
+    "n_columns": 43,
+    "schema_matches_module_constant": true,
+    "n_rows_hour_example": 8247,
+    "time_checks": [
+      {
+        "partition_hour": "2020-01-01T05",
+        "n_rows": 8179,
+        "timeObs_min": "2020-01-01T05:00",
+        "timeObs_max": "2020-01-01T05:59",
+        "covers_h15_to_h44": false,
+        "recv_lag_min_p50": 7.0,
+        "recv_lag_min_p99": 29.0,
+        "recv_lag_min_max": 78.0,
+        "recv_before_obs_frac": 0.029954762195867464
+      },
+      {
+        "partition_hour": "2020-01-01T06",
+        "n_rows": 8247,
+        "timeObs_min": "2020-01-01T06:00",
+        "timeObs_max": "2020-01-01T06:59",
+        "covers_h15_to_h44": false,
+        "recv_lag_min_p50": 5.0,
+        "recv_lag_min_p99": 25.0,
+        "recv_lag_min_max": 75.0,
+        "recv_before_obs_frac": 0.0289802352370559
+      },
+      {
+        "partition_hour": "2020-01-15T18",
+        "n_rows": 8415,
+        "timeObs_min": "2020-01-15T18:00",
+        "timeObs_max": "2020-01-15T18:59",
+        "covers_h15_to_h44": false,
+        "recv_lag_min_p50": 6.0,
+        "recv_lag_min_p99": 24.0,
+        "recv_lag_min_max": 94.0,
+        "recv_before_obs_frac": 0.023648247177658944
+      },
+      {
+        "partition_hour": "2020-01-31T23",
+        "n_rows": 8106,
+        "timeObs_min": "2020-01-31T23:00",
+        "timeObs_max": "2020-01-31T23:59",
+        "covers_h15_to_h44": false,
+        "recv_lag_min_p50": 5.0,
+        "recv_lag_min_p99": 25.0,
+        "recv_lag_min_max": 84.0,
+        "recv_before_obs_frac": 0.03182827535159141
+      }
+    ],
+    "n_unique_stations_sampled": 5460,
+    "n_rows_sampled": 1011113,
+    "n_partitions_sampled": 121,
+    "var_valid_counts_sampled": {
+      "temperature": 1004369,
+      "dewpoint": 996698,
+      "windDir": 962135,
+      "windSpeed": 998699,
+      "seaLevelPress": 249104,
+      "altimeter": 945258,
+      "visibility": 934831
+    },
+    "dd_distribution_sampled": {
+      "altimeter|B": 632,
+      "altimeter|G": 393,
+      "altimeter|Q": 27811,
+      "altimeter|S": 336791,
+      "altimeter|V": 579631,
+      "altimeter|Z": 65855,
+      "dewpoint|B": 773,
+      "dewpoint|G": 390,
+      "dewpoint|Q": 9010,
+      "dewpoint|S": 336656,
+      "dewpoint|V": 649769,
+      "dewpoint|X": 100,
+      "dewpoint|Z": 14415,
+      "seaLevelPress|B": 232,
+      "seaLevelPress|G": 236,
+      "seaLevelPress|Q": 13045,
+      "seaLevelPress|S": 4424,
+      "seaLevelPress|V": 231167,
+      "seaLevelPress|Z": 762009,
+      "temperature|B": 773,
+      "temperature|Q": 12202,
+      "temperature|S": 337696,
+      "temperature|V": 653604,
+      "temperature|X": 94,
+      "temperature|Z": 6744,
+      "visibility|B": 770,
+      "visibility|C": 934061,
+      "visibility|Z": 76282,
+      "windDir|B": 345,
+      "windDir|G": 385,
+      "windDir|Q": 17380,
+      "windDir|S": 311711,
+      "windDir|V": 632314,
+      "windDir|Z": 48978,
+      "windSpeed|B": 360,
+      "windSpeed|G": 388,
+      "windSpeed|Q": 17458,
+      "windSpeed|S": 337351,
+      "windSpeed|V": 643142,
+      "windSpeed|Z": 12414
+    },
+    "region_report_rows": {
+      "global (all)": 1011113,
+      "northern extra-tropics [30,60]": 795013,
+      "tropics [-30,30]": 148851,
+      "southern extra-tropics [-60,-30]": 13724,
+      "US [24,50]x[-125,-66]": 570106,
+      "Europe [35,60]x[-10,30]": 137262,
+      "East Asia [20,45]x[100,135]": 13955
+    },
+    "longitude_convention": "[-180, 180] (verified from data: negative longitudes present)",
+    "units_verified": {
+      "temperature": "K (MADIS: T air temperature K; values ~282K in sample)",
+      "dewpoint": "K",
+      "windDir": "deg, meteorological FROM direction (MADIS DD deg)",
+      "windSpeed": "m s-1 (MADIS FF)",
+      "seaLevelPress": "Pa (MADIS SLP Pa; values ~101300 in sample)",
+      "visibility": "m",
+      "elevation": "m"
+    },
+    "qc_fields": "one <var>DD descriptor per variable (S/T/V/C/Z); numeric MADIS QC codes NOT exported"
+  }
+}

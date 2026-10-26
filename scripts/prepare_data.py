@@ -43,8 +43,9 @@ def main() -> None:
         bg = s["background"][0].numpy().astype(np.float64)
         ref = s["reference"][0].numpy().astype(np.float64)
         # area-weighted background RMSE vs ERA5 for this cycle
+        # (plan section 5.2: sum_ij w_i e_ij^2 / sum_ij w_i with w_i = cos(lat))
         err2 = (bg - ref) ** 2
-        w = lat_weights[:, None]
+        w = np.broadcast_to(lat_weights[:, None], err2.shape)
         bg_rmse = float(np.sqrt(np.nansum(w * err2) / np.nansum(w)))
 
         stats.update("background", "2m_temperature", bg)
