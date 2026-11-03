@@ -1,6 +1,40 @@
+# Python
 .venv/
 __pycache__/
 *.pyc
 .pytest_cache/
-outputs/cache/
 *.egg-info/
+
+# Generated experiment outputs (regenerable artifacts: backgrounds, caches,
+# logs, checkpoints, metrics, figures, source snapshots) — nothing under
+# outputs/ belongs in version control.
+outputs/
+
+# ArchesWeather reproduction checkout and machine-local artifacts
+experiments/archesweather-reproduction/geoarches/
+experiments/archesweather-reproduction/data/
+experiments/archesweather-reproduction/data-venv/
+experiments/archesweather-reproduction/train-venv/
+experiments/archesweather-reproduction/modelstore/
+experiments/archesweather-reproduction/evalstore/
+experiments/archesweather-reproduction/wandblogs/
+
+# Runtime logs / process files
+experiments/archesweather-reproduction/logs/
+*.log
+*.pid
+*.lock
+
+# Tool caches
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Experiment tracking / tensorboard
+wandb/
+runs/
+lightning_logs/
+
+# OS / IDE / secrets
+.DS_Store
+.env

@@ -1,0 +1,115 @@
+diff --git a/geoarches/dataloaders/era5.py b/geoarches/dataloaders/era5.py
+index 2fb393b..5fc9f7b 100644
+--- a/geoarches/dataloaders/era5.py
++++ b/geoarches/dataloaders/era5.py
+@@ -16,7 +16,7 @@ filename_filters = dict(
+     all=(lambda _: True),
+     last_train=lambda x: ("2018" in x),
+     last_train_z0012=lambda x: ("2018" in x and ("0h" in x or "12h" in x)),
+-    train=lambda x: not ("2019" in x or "2020" in x or "2021" in x),
++    train=lambda x: any(str(y) in x for y in range(1998, 2018)),
+     # Splits val and test  are from 2019 and 2020 respectively, but
+     # we read the years before and after to account for offsets when
+     # loading previous and future timestamps for an example.
+@@ -24,7 +24,7 @@ filename_filters = dict(
+     test=lambda x: ("2019" in x or "2020" in x or "2021" in x),
+     test_z0012=lambda x: ("2019" in x or "2020" in x or "2021" in x) and ("0h" in x or "12h" in x),
+     test2022_z0012=lambda x: ("2022" in x) and ("0h" in x or "12h" in x),  # check if that works ?
+-    recent2=lambda x: any([str(y) in x for y in range(2007, 2019)]),
++    recent2=lambda x: any([str(y) in x for y in range(2007, 2018)]),
+     empty=lambda x: False,
+ )
+ 
+@@ -240,6 +240,7 @@ class Era5Forecast(Era5Dataset):
+         variables: Dict[str, List[str]] | None = None,
+         dimension_indexers: Dict[str, list] | None = None,
+         norm_scheme: str | None = "pangu",
++        norm_stats_path: str | None = None,
+         lead_time_hours: int = 24,
+         multistep: int = 1,
+         load_prev: bool = True,
+@@ -295,11 +296,16 @@ class Era5Forecast(Era5Dataset):
+ 
+         # include vertical component by default
+         geoarches_stats_path = importlib.resources.files(geoarches_stats)
+-        norm_file_path = geoarches_stats_path / "pangu_norm_stats2_with_w.pt"
++        if self.norm_scheme == "train_stats":
++            if not norm_stats_path:
++                raise ValueError("norm_stats_path is required when norm_scheme=train_stats")
++            norm_file_path = Path(norm_stats_path)
++        else:
++            norm_file_path = geoarches_stats_path / "pangu_norm_stats2_with_w.pt"
+         pangu_stats = torch.load(norm_file_path, weights_only=True)
+ 
+         # normalization,
+-        if self.norm_scheme == "pangu":
++        if self.norm_scheme in ("pangu", "train_stats"):
+             self.data_mean = TensorDict(
+                 surface=pangu_stats["surface_mean"],
+                 level=pangu_stats["level_mean"],
+@@ -404,7 +410,7 @@ class Era5Forecast(Era5Dataset):
+         # this is to update dataset based on how many training steps have already been performed
+         if model.global_step >= self.switch_recent_data_after_steps:
+             start_time = np.datetime64("2007-01-01T00:00:00")
+-            end_time = np.datetime64("2019-01-01T00:00:00")
++            end_time = np.datetime64("2018-01-01T00:00:00")
+ 
+             delta_start = int(self.load_prev) * self.lead_time_hours * np.timedelta64(1, "h")
+             delta_end = self.multistep * self.lead_time_hours * np.timedelta64(1, "h")
+diff --git a/geoarches/lightning_modules/forecast.py b/geoarches/lightning_modules/forecast.py
+index c3f2d29..fb1ab22 100644
+--- a/geoarches/lightning_modules/forecast.py
++++ b/geoarches/lightning_modules/forecast.py
+@@ -27,6 +27,7 @@ class ForecastModule(BaseLightningModule):
+         dataset=None,
+         pow=2,  # 2 is standard mse
+         loss_delta_normalization=True,
++        norm_stats_path=None,
+         lr=1e-4,
+         betas=(0.9, 0.98),
+         weight_decay=1e-5,
+@@ -77,18 +78,27 @@ class ForecastModule(BaseLightningModule):
+         if loss_delta_normalization:
+             # assumes include vertical wind component
+ 
+-            pangu_stats = torch.load(
+-                geoarches_stats_path / "pangu_norm_stats2_with_w.pt", weights_only=True
++            stats_path = (
++                Path(norm_stats_path)
++                if norm_stats_path
++                else geoarches_stats_path / "pangu_norm_stats2_with_w.pt"
+             )
++            norm_stats = torch.load(stats_path, weights_only=True)
+ 
+-            # mul by first to remove norm, div by second to apply fake delta normalization
+-            self.loss_delta_scaler = TensorDict(
+-                level=pangu_stats["level_std"]
+-                / torch.tensor(
++            # Convert unit-variance raw deltas into the selected input-normalized scale.
++            level_delta_std = norm_stats.get("level_delta_std")
++            surface_delta_std = norm_stats.get("surface_delta_std")
++            if level_delta_std is None:
++                level_delta_std = torch.tensor(
+                     [5.9786e02, 7.4878e00, 8.9492e00, 2.7132e00, 9.5222e-04, 0.3]
+-                ).reshape(-1, 1, 1, 1),
+-                surface=pangu_stats["surface_std"]
+-                / torch.tensor([3.8920, 4.5422, 2.0727, 584.0980]).reshape(-1, 1, 1, 1),
++                ).reshape(-1, 1, 1, 1)
++            if surface_delta_std is None:
++                surface_delta_std = torch.tensor(
++                    [3.8920, 4.5422, 2.0727, 584.0980]
++                ).reshape(-1, 1, 1, 1)
++            self.loss_delta_scaler = TensorDict(
++                level=norm_stats["level_std"] / level_delta_std,
++                surface=norm_stats["surface_std"] / surface_delta_std,
+             )
+             self.loss_coeffs = self.loss_coeffs * self.loss_delta_scaler.pow(self.pow)
+ 
+@@ -331,6 +341,7 @@ class ForecastModule(BaseLightningModule):
+             lr=self.lr,
+             betas=self.betas,
+             weight_decay=self.weight_decay,
++            foreach=False,
+         )
+         sched = diffusers.optimization.get_cosine_schedule_with_warmup(
+             opt,
