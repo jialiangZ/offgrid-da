@@ -1,0 +1,64 @@
+{
+  "contract_version": 1,
+  "profile": "archesweather-m-20y-6h-seed0-continue150k",
+  "source_repository": "experiments/archesweather-reproduction/geoarches",
+  "upstream_commit": "fb2285fc960fca4a42ae6d3cfaadabbe68318544",
+  "local_modifications": true,
+  "resolved_config": "experiments/archesweather-reproduction/geoarches/modelstore/archesweather-m-20y-6h-seed0-continue150k/config.yaml",
+  "checkpoint": {"path": null, "sha256": null, "selection": "freeze a chosen checkpoint after forecast validation"},
+  "time": {
+    "timezone": "UTC",
+    "native_timestamp": "Unix seconds at current state time t",
+    "history_offset_hours": -6,
+    "step_hours": 6,
+    "direct_forward_output": "normalized full state at t+6h",
+    "valid_time_rule": "init_time + lead_hours",
+    "multistep_leads_hours": [6, 12],
+    "latency_minutes": 30,
+    "observation_window": "(valid_time - 60 minutes, valid_time]"
+  },
+  "native_state": {
+    "surface_shape": ["B", 4, 1, 121, 240],
+    "surface_variables": ["10m_u_component_of_wind", "10m_v_component_of_wind", "2m_temperature", "mean_sea_level_pressure"],
+    "surface_units": ["m s-1", "m s-1", "K", "Pa"],
+    "level_shape": ["B", 6, 13, 121, 240],
+    "level_variables": ["geopotential", "u_component_of_wind", "v_component_of_wind", "temperature", "specific_humidity", "vertical_velocity"],
+    "level_units": ["m2 s-2", "m s-1", "m s-1", "K", "kg kg-1", "Pa s-1"],
+    "pressure_levels_hpa": [50, 100, 150, 200, 250, 300, 400, 500, 600, 700, 850, 925, 1000],
+    "latitude": "descending 90 to -90 by 1.5 degrees",
+    "longitude": "canonical ascending 0..358.5 degrees, then torch.roll(+120,-1)",
+    "required_inputs": ["state", "prev_state", "timestamp"],
+    "rollout_metadata": ["lead_time_hours"]
+  },
+  "da_background": {
+    "shape": ["B", 1, 121, 240],
+    "dtype": "float32",
+    "variables": ["2m_temperature"],
+    "units": ["K"],
+    "latitude": "descending 90 to -90 by 1.5 degrees",
+    "longitude": "ascending 0 to 358.5 by 1.5 degrees",
+    "native_surface_index": 2,
+    "longitude_roll_to_da": -120,
+    "interpolation_required": false
+  },
+  "normalization": {
+    "forecast_scheme": "train_stats",
+    "forecast_stats": "experiments/archesweather-reproduction/stats/era5_norm_stats_1998_2017_lead6h.pt",
+    "forecast_stats_sha256": "9e618417ba1ea57eb58f706dd180f9fbd3b2bf76b5381f1711ddd62347d3448c",
+    "forecast_training_years": [1998, 2017],
+    "da_stats": "outputs/normalization/norm_stats_train_2018_2020.json",
+    "da_stats_sha256": "40dc4a1a79da697843661e2e660b1f83c6374069ef126e0b7f0c2983b3c6d611",
+    "da_group": "background",
+    "conversion": "native normalized -> physical Kelvin -> DA normalized",
+    "reverse_conversion": "DA output * DA background std + DA background mean -> native normalized",
+    "loss_delta_stats_are_output_scaler": false
+  },
+  "cycling": {
+    "update_variables": ["2m_temperature"],
+    "carry_unchanged": "all other surface variables and all pressure-level variables",
+    "history": "after DA at t+6h: prev_state=state_at_t; state=corrected_state_at_t+6h; timestamp advances 21600 seconds",
+    "forecast_weights": "frozen",
+    "innovation_enabled": false,
+    "acceptance": "conversion tested; trained checkpoint inference and cycling pending"
+  }
+}
