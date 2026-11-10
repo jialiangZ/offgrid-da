@@ -1,73 +1,42 @@
 # Implementation Status
 
-**Project:** OffGrid-DA — Background-Aware Off-Grid Observation Assimilation
-**Round:** 1 (M0 + M1 minimal pipeline) — **Date:** 2026-10-27
+**更新：2026-11-10**（原 Round-1 快照已被取代；本文件现维护当前能力地图）。
 
-## Milestone summary
+## 当前能力（按数据流）
 
-| Milestone | Status | Evidence |
+| 环节 | 状态 | 关键模块 / 位置 |
 |---|---|---|
-| M0 environment / data audit | ✅ done | `docs/DATA_AUDIT.md`, `docs/VARIABLE_MAPPING.md`, `outputs/data_audit/` |
-| M1 minimal dataset + tests | ✅ done | 63/63 tests pass, real samples, `docs/DATA_SPEC.md` |
-| M2 minimal Off-Grid DA model | ⬜ next | — |
+| 数据源接入（ERA5/METAR/Pangu 审计） | ✅ | `src/offgrid_da/data/{metar,observations,qc}.py`；DATA_AUDIT.md |
+| 预报模型（ArchesWeather-M 6h，320k 步含 AR 微调） | ✅ | `experiments/archesweather-reproduction/`；F1–F7 |
+| 预报冻结契约（sha256 钉死） | ✅ | `configs/forecast/archesweather_6h_contract.json`、FORECAST_INTERFACE.md |
+| 82 通道背景生成 + 归一化 | ✅ | `scripts/generate_full_state_backgrounds.py`、`outputs/bg_t2m_*` |
+| 五变量 METAR 观测接入 | ✅ | `src/offgrid_da/data/metar_multivar.py`（single_da_06） |
+| 单周期神经 DA（dim128 交叉注意力，82 进 82 出，误差配权损失） | ✅ | `scripts/{run_error_balanced_pipeline,train_error_balanced}.py`（single_da_09） |
+| Cycling DA（t2m 线 + full82 线，free/NC/DA 对照） | ✅ | `outputs/cycling_*`；24×5d、24×15d |
+| 观测诊断（创新量分解 + 合成观测四臂对照） | ✅ | `outputs/obs_diagnostics_2021`、`outputs/step2_*`（2026-11-08~09） |
+| 合成观测 DA 匹配训练 | ✅ | `scripts/train_step2_synthetic.py` |
+| 2023 独立确认 | ⬜ 等 2023 ERA5 分片 | `outputs/cycling_t2m_06_confirm_2023_pending` |
+| 观测替换诊断（零创新/注意力关闭） | ⬜ 下一步 | 方案 §五 |
+| 预报模型升级（AIFS 质量上限线） | ⬜ 调研完成待实施 | EXPERIMENT_REGISTRY.md 附录 3 |
 
-## Implemented
+## 实验线索引
 
-- `src/offgrid_da/data/forecast.py` — Pangu reader (`prediction_timedelta` coordinate,
-  canonical grid conversion [C,121,240] lat-descending)
-- `src/offgrid_da/data/analysis.py` — ERA5 reader (same canonicalization)
-- `src/offgrid_da/data/metar.py` — HTTPS+cache parquet reader, window reads
-- `src/offgrid_da/data/variables.py` — variable registry, DD flag semantics + quality codes
-- `src/offgrid_da/data/qc.py` — window / received-cutoff / location / DD / range / dedup
-  filters with per-step counts
-- `src/offgrid_da/data/observations.py` — `ObservationRecord` / `ObservationSet`,
-  METAR → scalar tokens
-- `src/offgrid_da/data/alignment.py` — sample index (init+lead→valid), bilinear obs
-  operator (numpy + differentiable torch), longitude periodicity, pole clamping,
-  spherical distances
-- `src/offgrid_da/data/stations.py` — deterministic 80/20 context/held-out split
-- `src/offgrid_da/data/dataset.py` — `SingleCycleDADataset` (plan §3.8 output contract)
-- `src/offgrid_da/data/collate.py` — padded batches with token mask
-- `src/offgrid_da/utils/` — config (YAML), normalization (Welford, train-only),
-  io (cached GCS fetch), reproducibility
-- `scripts/audit_data.py`, `scripts/prepare_data.py`, `scripts/visualize.py`
-- 63 automated tests (12 files) incl. real-data schema/window/leakage tests
+- 实验目录索引（含命名规范、权重依赖）：`EXPERIMENTS.md`
+- 动机/结论叙事（全部实验）：`EXPERIMENT_REGISTRY.md`
+- Round-1 原始日志（2026-10-26/27，历史）：`EXPERIMENT_LOG.md`
 
-## Verified
+## 测试
 
-- `pytest tests/` → **63 passed** (first network run cached ~4 min, warm run ~4 s)
-- `scripts/audit_data.py` → full Phase-0 audit on live data
-- `scripts/prepare_data.py` → 60/60 cycles, statistics CSV + norm stats
-- `scripts/visualize.py` → 3 random cycles × 6 panels, station-split map, histograms
-- `DataLoader(batch_size=2, collate_fn=single_cycle_collate)` produces training-ready
-  batches of real samples
+- Round 1：80/80 通过（数据管线、指标、归一化、无泄漏）。
+- 各实验自带验收（frozen 指纹、配对初始化、无观测恒等、观测敏感性检查），
+  见各实验目录 `acceptance.json` / `status.json`。
 
-## Data used
+## 核心数字速查
 
-- Pangu: `gs://weatherbench2/datasets/pangu/2018-2022_0012_...zarr`, lead 6h, Jan-2020 inits
-- ERA5: `gs://weatherbench2/datasets/era5/1959-2023_01_10-6h-240x121_...zarr`, T2M
-- METAR: `metar-timeObs-by-hour_...`, 124 hourly partitions (Jan 2020)
-
-## Configuration
-
-`configs/data/wb2_metar.yaml` (paths, window 60 min, latency 30 min, splits, station split).
-
-## Known deviations from the plan
-
-1. Pangu has **no `lead_time` coordinate** — the real name is `prediction_timedelta`
-   (int64 hours). Code and docs use the real name.
-2. METAR QC in the parquet export carries only DD descriptors (no numeric MADIS QC
-   codes). DD semantics beyond the documented S/T/V/C/Z were characterized empirically
-   (B/G/Q/X; only Z has no values; X rows implausible) — see DATA_AUDIT §4.
-3. Hourly partitions contain timeObs [H:00, H:59] (rebucketed), not the raw
-   [H−15, H+44] MADIS window — window reader adapted accordingly.
-
-## Next (Round 2 proposal)
-
-1. M2: Background encoder + observation encoder + sparse spherical-kNN cross-attention +
-   zero-init residual decoder; plan §4.7 tests A–G.
-2. Cache monthly METAR as consolidated arrays to speed dataset init (~190 s cold scan →
-   seconds).
-3. Compute 2018–2020 train normalization statistics (plan §3.9) and station split over
-   the full train window.
-4. Baseline 0 (background identity) evaluation harness on the minimal window.
+| 量 | 数值 | 出处 |
+|---|---:|---|
+| 2021 背景基线 T2M RMSE | 0.441409 K | single_da_01 |
+| 真实观测 DA（seed42/43）| 0.43494/0.43516 K | single_da_09 |
+| 合成观测 DA | 0.42928/0.42969 K | step2_synthetic_da |
+| 合成+局地基线（理想天花板）| 0.41720 K | step2_local_baseline |
+| 创新量噪声占比 | 94.8% | obs_diagnostics_2021 |

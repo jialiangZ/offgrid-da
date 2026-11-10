@@ -1,0 +1,42 @@
+{
+  "applied_at": "2026-11-03",
+  "scheme": "<series>_<update-scope>_<number>_<purpose>; series = single_da | cycling | report | bg; update-scope = t2m (only T2M updated) | full82 (all 82 channels updated)",
+  "note": "Historical JSON logs inside outputs/ still embed pre-rename absolute paths; resolve them through this table. Renamed dirs are not tracked by git.",
+  "renames": {
+    "outputs/cross_attention_validation": "outputs/single_da_00_model_check_crossattn",
+    "outputs/single_cycle_preflight": "outputs/single_da_01_preflight_smoke",
+    "outputs/single_cycle_v1": "outputs/single_da_02_t2m_dim32_main",
+    "outputs/single_cycle_test_2022": "outputs/single_da_03_t2m_test_2022",
+    "outputs/single_cycle_controls_v2": "outputs/single_da_04_t2m_controls_ablation_oi",
+    "outputs/full_state_input_v2": "outputs/single_da_05_input82_ablation",
+    "outputs/metar_multivar_v1": "outputs/single_da_06_obs_metar5_prep",
+    "outputs/full_update_v1": "outputs/single_da_07_full82_small_stopped",
+    "outputs/full_update_large_v1": "outputs/single_da_08_full82_large",
+    "outputs/error_balanced_v1": "outputs/single_da_09_full82_loss_balanced",
+    "outputs/single_da_report_20261102": "outputs/report_single_da_20261102",
+    "outputs/cycling_pilot_v1": "outputs/cycling_t2m_01_pilot_4win_5d",
+    "outputs/cycling_scaling_v1": "outputs/cycling_t2m_02_alpha_scaling",
+    "outputs/cycling_24windows_v1": "outputs/cycling_t2m_03_24win_raw",
+    "outputs/cycling_evaluation_v1": "outputs/cycling_t2m_04_24win_eval",
+    "outputs/cycling_15days_v1": "outputs/cycling_t2m_05_15day",
+    "outputs/cycling_confirmation_2023_v1": "outputs/cycling_t2m_06_confirm_2023_pending",
+    "outputs/full_update_cycling_v1": "outputs/cycling_full82_01_small_superseded",
+    "outputs/full_update_large_cycling_v1": "outputs/cycling_full82_02_large",
+    "outputs/arches_backgrounds_train_2018_2020": "outputs/bg_t2m_train_2018_2020",
+    "outputs/arches_backgrounds_val_2021": "outputs/bg_t2m_val_2021",
+    "outputs/arches_backgrounds_test_2022": "outputs/bg_t2m_test_2022"
+  },
+  "kept_as_is": [
+    "outputs/normalization (frozen train statistics; referenced by all datasets)",
+    "outputs/cache, outputs/da_sample_cache, outputs/da_test_sample_cache, outputs/metar_multivar_cache (regenerable caches)",
+    "outputs/data_audit, outputs/baselines, outputs/forecast_contract, outputs/forecast_freeze (Round-1 data audit artifacts)",
+    "outputs/arches_backgrounds_probe, outputs/arches_gpu3_probe, outputs/arches_gpu3_fp32_probe (engineering probes; deletion candidates)",
+    "configs/da/single_cycle_v1.json, configs/da/full_state_input_v2.json (config filenames unchanged; see this table for their experiments)"
+  ],
+  "process_actions": {
+    "killed_pid": 528203,
+    "killed_cmd": "scripts/wait_and_run_confirmation_2023.py (2023 confirmation queue)",
+    "last_status": "waiting_for_2023_data, missing_timestamps=1224",
+    "restart_procedure": "When 2023 ERA5 netCDF shards exist under experiments/archesweather-reproduction/data/era5_240/full: re-freeze confirmation_protocol.json (its frozen_files sha256 entries cover edited scripts), then relaunch scripts/wait_and_run_confirmation_2023.py. Script paths already point at the renamed dirs."
+  }
+}

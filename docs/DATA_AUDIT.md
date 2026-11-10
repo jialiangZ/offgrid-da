@@ -1,6 +1,11 @@
 # OffGrid-DA Data Audit (Phase 0)
 
-Generated: 2026-10-26 16:08:10.934586 | all values from live reads of gs://weatherbench2
+> 历史口径注记（2026-11-10）：本审计完成于 2026-10-26，其中 Pangu 作为"背景来源"
+> 的角色仅存在于 Round 1；此后背景已切换为冻结 ArchesWeather 预报（FORECAST_INTERFACE.md）。
+> 文档对三个数据源结构、网格、时间约定与 QC 语义的审计结论仍然有效，
+> 继续作为数据接入的权威参照。
+
+Generated: 2026-10-26 17:03:12.916167 | all values from live reads of gs://weatherbench2
 
 ## 1. Pangu forecast (background)
 
@@ -27,10 +32,10 @@ Generated: 2026-10-26 16:08:10.934586 | all values from live reads of gs://weath
 ## 3. Time matching (Pangu <-> ERA5)
 
 - Rule: valid_time = init_time(00/12Z) + 6h => analysis hours 06/18 UTC (all present in ERA5)
-- Minimal window 2020-01-01 .. 2020-01-31: **60 aligned samples**, valid hours [6, 18]
-- Split train (2018-01-01..2020-12-31): 2190 samples
-- Split val (2021-01-01..2021-12-31): 728 samples
-- Split test (2022-01-01..2022-12-31): 728 samples
+- Minimal window [2020-01-01, 2020-02-01): **62 aligned samples**, valid hours [6, 18]
+- Split train [2018-01-01, 2021-01-01): 2192 samples
+- Split val [2021-01-01, 2022-01-01): 730 samples
+- Split test [2022-01-01, 2023-01-01): 730 samples
 
 ## 4. MADIS METAR (observations)
 

@@ -1,6 +1,6 @@
 # Variable Mapping (Pangu / ERA5 / METAR)
 
-Generated: 2026-10-26 16:08:10.934961 — names verified against live schemas.
+Generated: 2026-10-26 17:03:12.916636 — names verified against live schemas.
 
 | internal name | variable_id | units | Pangu zarr var | ERA5 zarr var | METAR column | METAR DD col | obs error (default) |
 |---|---|---|---|---|---|---|---|
