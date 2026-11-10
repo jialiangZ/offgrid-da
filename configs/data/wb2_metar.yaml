@@ -21,7 +21,7 @@ data:
 
 # Time configuration for single-cycle samples
 time:
-  lead_time_hours: 6        # Pangu forecast lead used as background
+  lead_time_hours: null     # choose the shortest available lead for each ERA5 valid time
   analysis_interval_hours: 6
   # Observation window (relative to analysis/valid time), see plan section 3.4
   observation_window_minutes: 60
@@ -33,14 +33,23 @@ variables:
   background_variables: ["2m_temperature"]
   era5_reference_variables: ["2m_temperature"]
 
-# Splits (plan section 3.2). Stage-1 minimal pipeline uses only Jan 2020.
+# Frozen training-only normalization; samples also retain physical-unit fields.
+normalization:
+  stats_path: "outputs/normalization/norm_stats_train_2018_2020.json"
+
+# Effective station-to-grid uncertainty combines instrument and representation
+# errors in quadrature. The ~2.5 K T2M value is a representativeness floor.
+observation_error:
+  representativeness_std: {"2m_temperature": 2.5}
+
+# Date intervals use [start, end): the end is the first excluded day.
 splits:
-  train: {"start": "2018-01-01", "end": "2020-12-31"}
-  val:   {"start": "2021-01-01", "end": "2021-12-31"}
-  test:  {"start": "2022-01-01", "end": "2022-12-31"}
+  train: {"start": "2018-01-01", "end": "2021-01-01"}
+  val:   {"start": "2021-01-01", "end": "2022-01-01"}
+  test:  {"start": "2022-01-01", "end": "2023-01-01"}
 
 # Minimal first-round sample window (plan section 12, Task 3)
-minimal_window: {"start": "2020-01-01", "end": "2020-01-31"}
+minimal_window: {"start": "2020-01-01", "end": "2020-02-01"}
 
 station_split:
   context_fraction: 0.8

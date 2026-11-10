@@ -1,9 +1,8 @@
 """Normalization statistics (plan section 3.9).
 
 Statistics are computed ONLY from the requested (training) samples and saved
-as JSON. For the minimal Phase-1 window they describe Jan-2020; full
-2018-2020 statistics will be recomputed before real training (documented in
-docs/DATA_SPEC.md).
+as JSON. The configured 2018-2020 statistics are shared by train, validation,
+and test samples; each sample keeps physical fields and adds normalized copies.
 """
 from __future__ import annotations
 
@@ -28,11 +27,44 @@ class NormStats:
             variable, {"n": 0, "mean": 0.0, "m2": 0.0}
         )
         entry = self.stats[group][variable]
-        for v in values.ravel():  # Welford online update, exact enough at this scale
-            entry["n"] += 1
-            delta = v - entry["mean"]
-            entry["mean"] += delta / entry["n"]
-            entry["m2"] += delta * (v - entry["mean"])
+        batch_n = int(values.size)
+        batch_mean = float(values.mean())
+        centered = values - batch_mean
+        batch_m2 = float(np.sum(centered * centered, dtype=np.float64))
+
+        old_n = int(entry["n"])
+        if old_n == 0:
+            entry["n"] = batch_n
+            entry["mean"] = batch_mean
+            entry["m2"] = batch_m2
+            return
+
+        total_n = old_n + batch_n
+        delta = batch_mean - entry["mean"]
+        entry["mean"] += delta * batch_n / total_n
+        entry["m2"] += batch_m2 + delta * delta * old_n * batch_n / total_n
+        entry["n"] = total_n
+
+    def merge(self, other: "NormStats") -> None:
+        """Merge sufficient statistics from another independently computed batch."""
+        for group, variables in other.stats.items():
+            self.stats.setdefault(group, {})
+            for variable, batch in variables.items():
+                old = self.stats[group].get(variable)
+                batch_n = int(batch["n"])
+                if old is None or int(old["n"]) == 0:
+                    self.stats[group][variable] = {
+                        "n": batch_n,
+                        "mean": float(batch["mean"]),
+                        "m2": float(batch["m2"]),
+                    }
+                    continue
+                old_n = int(old["n"])
+                total_n = old_n + batch_n
+                delta = float(batch["mean"]) - old["mean"]
+                old["mean"] += delta * batch_n / total_n
+                old["m2"] += float(batch["m2"]) + delta * delta * old_n * batch_n / total_n
+                old["n"] = total_n
 
     def mean(self, group: str, variable: str) -> float:
         return float(self.stats[group][variable]["mean"])
@@ -40,6 +72,15 @@ class NormStats:
     def std(self, group: str, variable: str) -> float:
         entry = self.stats[group][variable]
         return float(np.sqrt(entry["m2"] / max(entry["n"] - 1, 1)))
+
+    def normalize(self, group: str, variable: str, values: np.ndarray) -> np.ndarray:
+        """Standardize values with the frozen training-period mean and std."""
+        mean = self.mean(group, variable)
+        std = self.std(group, variable)
+        if not np.isfinite(std) or std <= 0:
+            raise ValueError(f"invalid normalization std for {group}/{variable}: {std}")
+        values = np.asarray(values, dtype=np.float32)
+        return ((values - np.float32(mean)) / np.float32(std)).astype(np.float32)
 
     def to_dict(self) -> dict:
         out: dict[str, dict[str, dict[str, float]]] = {}

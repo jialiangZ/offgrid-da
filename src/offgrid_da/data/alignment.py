@@ -32,51 +32,65 @@ def build_sample_index(
     era5: ERA5Reader,
     start: str | pd.Timestamp,
     end: str | pd.Timestamp,
-    lead_hours: int = 6,
+    lead_hours: int | None = 6,
     init_hours: tuple[int, ...] = (0, 12),
+    valid_interval_hours: int | None = None,
 ) -> pd.DataFrame:
-    """Build the single-cycle sample index.
+    """Build one forecast sample per selected ERA5 valid time.
 
-    One row per (init_time, lead_time) pair such that
-      * init_time exists in Pangu
-      * lead exists in Pangu
-      * valid_time = init_time + lead exists in ERA5
-      * valid_time within [start, end] (inclusive)
+    Integer lead_hours preserves fixed-lead behavior. None chooses the
+    shortest available Pangu lead whose initialization exists and falls in
+    init_hours. The optional cadence is anchored at start.
     """
-    if not pangu.has_lead(lead_hours):
+    start, end = pd.Timestamp(start), pd.Timestamp(end)
+    if valid_interval_hours is not None and valid_interval_hours <= 0:
+        raise ValueError("valid_interval_hours must be positive")
+    if lead_hours is not None and not pangu.has_lead(int(lead_hours)):
         raise KeyError(
             f"Pangu lead_time {lead_hours}h does not exist in this dataset; "
             f"available leads: {sorted(set(int(x) for x in pangu.lead_hours))}"
         )
-    start, end = pd.Timestamp(start), pd.Timestamp(end)
+
+    available_leads = sorted(set(int(x) for x in pangu.lead_hours))
+    candidate_leads = available_leads if lead_hours is None else [int(lead_hours)]
+    init_times = pd.DatetimeIndex(pangu.init_times)
+    init_set = set(init_times)
+    era_times = pd.DatetimeIndex(era5.times)
+    selected_times = era_times[(era_times >= start) & (era_times < end)]
     rows = []
-    for init_time in pangu.init_times:
-        if init_time.hour not in init_hours:
+    for valid_time in selected_times:
+        if valid_interval_hours is not None:
+            offset_hours = (valid_time - start) / pd.Timedelta(hours=1)
+            if offset_hours % valid_interval_hours:
+                continue
+        match = None
+        for lead in candidate_leads:
+            init_time = valid_time - pd.Timedelta(hours=lead)
+            if init_time.hour in init_hours and init_time in init_set:
+                match = (init_time, lead)
+                break
+        if match is None:
             continue
-        valid_time = init_time + pd.Timedelta(hours=lead_hours)
-        if not (start <= valid_time <= end):
-            continue
-        if not era5.has_time(valid_time):
-            continue
+        init_time, selected_lead = match
         rows.append(
             {
                 "sample_id": valid_time.strftime("%Y%m%dT%H"),
                 "init_time": init_time,
-                "lead_time_hours": lead_hours,
+                "lead_time_hours": selected_lead,
                 "valid_time": valid_time,
-                "forecast_index": int(pangu.init_times.get_loc(init_time)),
-                "analysis_index": int(era5.times.get_loc(valid_time)),
+                "forecast_index": int(init_times.get_loc(init_time)),
+                "analysis_index": int(era_times.get_loc(valid_time)),
                 "observation_window_start": valid_time - pd.Timedelta(minutes=60),
                 "observation_window_end": valid_time,
             }
         )
-    df = pd.DataFrame(rows).sort_values("valid_time").reset_index(drop=True)
-    if df.empty:
+    if not rows:
+        lead_description = "shortest available" if lead_hours is None else f"{lead_hours}h"
         raise ValueError(
-            f"No aligned samples in [{start}, {end}] with lead={lead_hours}h; "
+            f"No aligned samples in [{start}, {end}) with lead={lead_description}; "
             "check time overlap between Pangu and ERA5."
         )
-    return df
+    return pd.DataFrame(rows).sort_values("valid_time").reset_index(drop=True)
 
 
 # --------------------------------------------------------------------------- #

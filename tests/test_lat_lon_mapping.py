@@ -49,7 +49,7 @@ def test_field_rows_correspond_to_latitudes(dataset):
     p = PanguReader(dataset.cfg["data"]["pangu"]["url"])
     da = p.ds["2m_temperature"].sel(
         time=np.datetime64(row["init_time"], "ns"),
-        prediction_timedelta=6,
+        prediction_timedelta=int(row["lead_time_hours"]),
     ).values  # (longitude, latitude); last latitude is -90 in source
     canonical = dataset[0]["background"][0].numpy()
     # canonical row 120 (=-90) == source column at latitude=-90

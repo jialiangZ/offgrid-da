@@ -25,7 +25,10 @@ def test_all_valid_times_in_era5(dataset, cfg):
 
 def test_analysis_hours(dataset):
     hours = set(dataset.sample_table()["valid_time"].dt.hour)
-    assert hours == {6, 18}  # 00/12Z init + 6h lead
+    assert hours == {0, 6, 12, 18}  # every ERA5 six-hour valid time
+    table = dataset.sample_table()
+    assert (table["valid_time"].diff().dropna() == pd.Timedelta(hours=6)).all()
+    assert set(table["lead_time_hours"]) == {6, 12}
 
 
 def test_lead_missing_raises(cfg):

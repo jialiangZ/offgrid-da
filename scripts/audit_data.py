@@ -332,12 +332,12 @@ def main() -> None:
     A("")
     mw = t["minimal_window"]
     A(f"- Rule: {t['rule']}")
-    A(f"- Minimal window {mw['start']} .. {mw['end']}: **{mw['n_samples']} aligned samples**, valid hours {mw['valid_hours']}")
+    A(f"- Minimal window [{mw['start']}, {mw['end']}): **{mw['n_samples']} aligned samples**, valid hours {mw['valid_hours']}")
     for name, s in t["spans"].items():
         if "error" in s:
             A(f"- Split {name}: ERROR {s['error']}")
         else:
-            A(f"- Split {name} ({s['start']}..{s['end']}): {s['n_samples']} samples")
+            A(f"- Split {name} [{s['start']}, {s['end']}): {s['n_samples']} samples")
     A("")
     A("## 4. MADIS METAR (observations)")
     A("")
