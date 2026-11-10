@@ -38,7 +38,7 @@ JSON(protocol/frozen/status)仍嵌有改名前的绝对路径,反查请用该映
 | `cycling_t2m_03_24win_raw` | cycling_24windows_v1 | 2021 年 24×5 天原始循环记录 | 完成 |
 | `cycling_t2m_04_24win_eval` | cycling_evaluation_v1 | 24 窗口扩展评估(区域/留出站点/月份分组) | 完成 |
 | `cycling_t2m_05_15day` | cycling_15days_v1 | 24×15 天(60 周期)长循环,延伸至 2022-01 | 完成 |
-| `cycling_t2m_06_confirm_2023_pending` | cycling_confirmation_2023_v1 | 2023 年 24 窗口×60 周期确认实验 | **排队中,等 2023 数据**(见下方注) |
+| `cycling_t2m_06_confirm_2023` | cycling_confirmation_2023_v1 | 2023 年 24 窗口×60 周期确认实验;数据=ARCO 重网格分片(与 WB2 口径验证至噪声级);DA 优于 free/NC(双种子、全球/留出站/区域一致) | 完成 | `evaluation_report.md` 在目录内 |
 
 ### full82 线(82 通道全状态更新;权重来自 single_da_08)
 
@@ -59,6 +59,7 @@ JSON(protocol/frozen/status)仍嵌有改名前的绝对路径,反查请用该映
 | `step2_synthetic_da` | 第二步:合成观测 DA 匹配训练(seed42/43)+ 四臂对照 `four_arm_summary.md` | 完成 |
 | `step3_obs_content` | 第三步:观测内容替换诊断(零创新/打乱/注意力关,1460 周期)+ 归因 | 完成 |
 | `step3_impulse` | 第三步:单站脉冲响应探针(稠密区 400km vs 稀疏区 1200km 足迹) | 完成 |
+| `step3_spatial` | 第三步:空间分层评估(距观测距离分桶 + 留出站分层,收益集中 <300km 桶) | 完成 |
 
 结论速览：H1、H2 同时成立且 H1 为主——完美观测下神经 DA(−2.7%)只有局地基线(−5.5%)的一半；
 真实观测下 DA(−1.45%)>局地基线(~0%),跨变量利用是网络优势面。
@@ -84,7 +85,11 @@ JSON(protocol/frozen/status)仍嵌有改名前的绝对路径,反查请用该映
 ## 2023 确认实验重启注记
 
 改名时(2026-11-03)kill 了等待进程 `wait_and_run_confirmation_2023.py`(原 PID 528203,
-最后状态 `waiting_for_2023_data`,缺 1224 个时次)。脚本路径已更新为新目录名。当
-`experiments/archesweather-reproduction/data/era5_240/full` 下 2023 年 ERA5 netCDF 齐
-全后:先重新冻结 `confirmation_protocol.json`(其中 frozen_files 的 sha256 覆盖了被
-本次改动过的脚本),再重启该等待脚本。
+最后状态 `waiting_for_2023_data`,缺 1224 个时次)。脚本路径已更新为新目录名。
+**2026-11-10/11 已完成**:2023 ERA5 分片由 ARCO v3 经一阶保守重网格生成(WB2 桶
+无 2023 全年;2022 口径验证至数值噪声级,见 `experiments/.../data/era5_240/prepare_2023_report.json`),
+协议重冻结(路径更新+5 脚本新哈希+分片哈希)后由等待脚本自动执行。
+执行注记:geoarches/.venv 需补装 pyarrow;双种子并发下载 METAR 有缓存竞态,
+seed42 因竞态失败后单进程补跑成功。结果:`evaluation_report.md`——
+DA 2.280/2.282 K 优于 free 2.311 与 NC 2.296/2.303(−1.3% vs free),留出站、
+北半球温带/欧洲/北美区域一致改善,热带微小(观测少),预声明协议无重选。

@@ -15,7 +15,7 @@
 | Cycling DA（t2m 线 + full82 线，free/NC/DA 对照） | ✅ | `outputs/cycling_*`；24×5d、24×15d |
 | 观测诊断（创新量分解 + 合成观测四臂对照） | ✅ | `outputs/obs_diagnostics_2021`、`outputs/step2_*`（2026-11-08~09） |
 | 合成观测 DA 匹配训练 | ✅ | `scripts/train_step2_synthetic.py` |
-| 2023 独立确认 | ⬜ 等 2023 ERA5 分片 | `outputs/cycling_t2m_06_confirm_2023_pending` |
+| 2023 独立确认 | ✅ DA −1.3% vs free（2.280/2.282 vs 2.311，双种子/留出站/区域一致） | `outputs/cycling_t2m_06_confirm_2023` |
 | 观测替换诊断（零创新/注意力关闭） | ⬜ 下一步 | 方案 §五 |
 | 预报模型升级（AIFS 质量上限线） | ⬜ 调研完成待实施 | EXPERIMENT_REGISTRY.md 附录 3 |
 

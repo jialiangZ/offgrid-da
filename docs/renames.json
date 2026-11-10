@@ -24,7 +24,8 @@
     "outputs/full_update_large_cycling_v1": "outputs/cycling_full82_02_large",
     "outputs/arches_backgrounds_train_2018_2020": "outputs/bg_t2m_train_2018_2020",
     "outputs/arches_backgrounds_val_2021": "outputs/bg_t2m_val_2021",
-    "outputs/arches_backgrounds_test_2022": "outputs/bg_t2m_test_2022"
+    "outputs/arches_backgrounds_test_2022": "outputs/bg_t2m_test_2022",
+    "outputs/cycling_t2m_06_confirm_2023_pending": "outputs/cycling_t2m_06_confirm_2023"
   },
   "kept_as_is": [
     "outputs/normalization (frozen train statistics; referenced by all datasets)",

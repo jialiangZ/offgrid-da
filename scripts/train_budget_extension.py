@@ -45,6 +45,12 @@ BASES = {
     "real": ROOT / "outputs/single_da_09_full82_loss_balanced",
     "syn": ROOT / "outputs/step2_synthetic_da",
 }
+
+
+def base_config_path(arm, seed):
+    d = BASES[arm]
+    c = d / f"seed{seed}" / "da" / "formal" / "config.json"
+    return c if c.exists() else d / f"config_seed{seed}.json"
 STATS = ROOT / "outputs/single_da_09_full82_loss_balanced/loss_statistics.json"
 
 
@@ -110,8 +116,9 @@ def main():
 
     stats = glue(args.arm)
     base_dir = BASES[args.arm] / f"seed{args.seed}" / "da" / "formal"
-    cfg = json.loads((base_dir / "config.json").read_text())
-    base_config_sha = hashlib.sha256((base_dir / "config.json").read_bytes()).hexdigest()
+    base_cfg_path = base_config_path(args.arm, args.seed)
+    cfg = json.loads(base_cfg_path.read_text())
+    base_config_sha = hashlib.sha256(base_cfg_path.read_bytes()).hexdigest()
     cfg["epochs"] += args.extra_epochs
     cfg["name"] = f"budget_ext_{args.arm}_{args.seed}_da"
     out = ROOT / args.out / args.arm / f"seed{args.seed}" / "da" / "formal"
