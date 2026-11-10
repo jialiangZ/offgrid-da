@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import hashlib
 import io
+import os
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -47,7 +49,10 @@ def fetch_bytes(url: str, timeout: int = 120) -> bytes:
 
 
 def cached_fetch(url: str, cache_dir: str | Path) -> bytes:
-    """Fetch with a content-addressed local cache under ``cache_dir``."""
+    """Fetch with a content-addressed local cache under ``cache_dir``.
+
+    Concurrent-safe: each writer stages to a unique temp file and atomically
+    replaces the cache entry; losing a race is harmless (identical content)."""
     cache_path = Path(cache_dir)
     cache_path.mkdir(parents=True, exist_ok=True)
     key = hashlib.sha1(gs_to_https(url).encode()).hexdigest()
@@ -55,9 +60,14 @@ def cached_fetch(url: str, cache_dir: str | Path) -> bytes:
     if cached_file.exists():
         return cached_file.read_bytes()
     data = fetch_bytes(url)
-    tmp = cached_file.with_suffix(".tmp")
-    tmp.write_bytes(data)
-    tmp.rename(cached_file)
+    if cached_file.exists():  # lost a race: another writer finished first
+        return data
+    tmp = cached_file.with_suffix(f".{os.getpid()}.{threading.get_ident()}.tmp")
+    try:
+        tmp.write_bytes(data)
+        os.replace(tmp, cached_file)
+    finally:
+        tmp.unlink(missing_ok=True)
     return data
 
 
