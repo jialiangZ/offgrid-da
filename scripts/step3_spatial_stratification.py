@@ -49,6 +49,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--stride", type=int, default=4)
     ap.add_argument("--out", default="outputs/step3_spatial")
+    ap.add_argument("--extra-model", action="append", default=[],
+                    help="NAME=PATH to include an additional trained DA model group")
     args = ap.parse_args()
     device = torch.device("cuda:0")
     stats = json.loads((ROOT / "outputs/single_da_09_full82_loss_balanced/loss_statistics.json").read_text())
@@ -56,7 +58,13 @@ def main():
 
     datasets = {"real": base_runner.Data(ROOT, "val"), "syn": syn_module.SyntheticData(ROOT, "val")}
     models = {arm: [load_model(p, device) for p in paths] for arm, paths in MODELS.items()}
-    n_groups = 5  # background + 2 arms x 2 seeds
+    extra_names = []
+    for spec in args.extra_model:
+        name, path = spec.split("=", 1)
+        models[name] = [load_model(ROOT / path, device)]
+        extra_names.append(name)
+    group_names = ["background", "real_s42", "real_s43", "syn_s42", "syn_s43"] + extra_names
+    n_groups = len(group_names)
 
     # accumulators: dist bins x channels for sse/bias, station-role for sse/bias
     dist_sse = np.zeros((n_groups, len(BINS) - 1, len(CH)))
@@ -83,6 +91,8 @@ def main():
             syn_obs = {k: syn_batch[k].to(device) for k in OBS_KEYS}
             for si in (0, 1):
                 preds.append(models["syn"][si](x, syn_obs)["analysis"])
+            for name in extra_names:  # extra DA models, real observations
+                preds.append(models[name][0](x, obs)["analysis"])
             preds = torch.stack(preds)  # (G,1,82,H,W)
             err = (preds.double() - y.double()) * torch.tensor(phys_std, device=device).double()[None, None, :, None, None]
 
@@ -132,7 +142,7 @@ def main():
 
     # finalize station denominators (finite counts equal across groups; recount)
     results = {"cycles": len(range(0, len(datasets["real"]), args.stride)), "stride": args.stride,
-               "groups": ["background", "real_s42", "real_s43", "syn_s42", "syn_s43"],
+               "groups": group_names,
                "channels": list(CH), "bins_km": [list(BINS[:-1]) + ["inf"]],
                "dist_rmse": {}, "dist_bias": {}, "dist_gridcell_share": (n_dist_cells / n_dist_cells.sum()).tolist(),
                "station_rmse": {}, "station_bias": {}, "station_n": st_n.tolist()}

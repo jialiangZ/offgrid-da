@@ -6,10 +6,14 @@ from torch import nn
 from .observation_encoder import ObservationEncoder
 
 class CrossAttentionAnalysisModel(nn.Module):
-    def __init__(self, channels=1, dim=64, heads=4, depth=2, injection='layered', radius_km=1000., max_neighbors=16, query_chunk=256):
+    def __init__(self, channels=1, dim=64, heads=4, depth=2, injection='layered', radius_km=1000., max_neighbors=16, query_chunk=256, radius_schedule=None, neighbors_schedule=None):
         super().__init__()
         if injection not in {'entry','layered'} or radius_km <= 0 or max_neighbors < 1 or query_chunk < 1: raise ValueError('invalid attention configuration')
+        if radius_schedule is not None and (len(radius_schedule)!=depth or any(r<=0 for r in radius_schedule)): raise ValueError('radius_schedule must match depth with positive radii')
+        if neighbors_schedule is not None and (len(neighbors_schedule)!=depth or any(int(k)<1 for k in neighbors_schedule)): raise ValueError('neighbors_schedule must match depth with positive counts')
         self.injection=injection; self.radius_km=float(radius_km); self.max_neighbors=int(max_neighbors); self.query_chunk=int(query_chunk)
+        self.radius_schedule=[float(r) for r in radius_schedule] if radius_schedule is not None else None
+        self.neighbors_schedule=[int(k) for k in neighbors_schedule] if neighbors_schedule is not None else None
         self.observation_encoder=ObservationEncoder(dim=dim,use_innovation=False)
         self.input=nn.Conv2d(channels,dim,3,padding=1)
         self.blocks=nn.ModuleList([nn.Sequential(nn.Conv2d(dim,dim,3,padding=1),nn.GELU(),nn.Conv2d(dim,dim,3,padding=1)) for _ in range(depth)])
@@ -27,7 +31,9 @@ class CrossAttentionAnalysisModel(nn.Module):
         glat,glon=torch.meshgrid(lat,lon,indexing='ij'); grid=self._xyz(glat.reshape(-1),glon.reshape(-1))
         loc=locations.float(); valid=mask & torch.isfinite(loc).all(-1) & (loc[:,:,0].abs()<=90)
         safe=torch.where(valid.unsqueeze(-1),loc,torch.zeros_like(loc)); xyz=self._xyz(safe[:,:,0],safe[:,:,1])
-        cosine=math.cos(min(self.radius_km/6371.0,math.pi)); k=min(n,self.max_neighbors); chunks=[]
+        radius=self.radius_schedule[layer] if self.radius_schedule is not None else self.radius_km
+        kn=self.neighbors_schedule[layer] if self.neighbors_schedule is not None else self.max_neighbors
+        cosine=math.cos(min(radius/6371.0,math.pi)); k=min(n,kn); chunks=[]
         for start in range(0,h*w,self.query_chunk):
             end=min(start+self.query_chunk,h*w); sim=torch.einsum('qd,bnd->bqn',grid[start:end],xyz).masked_fill(~valid[:,None,:],-2.)
             dist,idx=sim.topk(k,dim=-1); good=dist>=cosine; count=end-start
