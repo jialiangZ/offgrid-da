@@ -239,8 +239,7 @@
 
 
 
-### §四 预算充分性检查（single_da_10，2026-11-10~11，双臂完成）
-- **做法**：matched budget extension——从 last.pt 全状态续训（optimizer/scheduler/
+### §四 预算充分性检查（single_da_10，2026-11-10~11，双臂完成）- **做法**：matched budget extension——从 last.pt 全状态续训（optimizer/scheduler/
   RNG/数据顺序连续），epochs 10→15，cosine LR 按新终点重算；resume 签名锁仅对
   max_steps/config 放宽并记录（train_budget_extension.py）。
 - **结果**（两臂 s42 验证轨迹，前 2 epoch 因 LR 扰动变差后单调改善）：
@@ -264,6 +263,27 @@
   0→0.25 的 10 倍。
 - **结论**：**H2 由观测噪声量级充分解释**，无需额外代表性/编码假设。
 - **产物**：outputs/step4_noise_response/、scripts/step4_noise_response.py。
+
+### single_da_11 多尺度邻居调度（结构实验，2026-11-11~12，完成）
+- **动机**：S3/空间分层定位的 H1 主缺口（近场增益幅度不足 + 300–1000km 桥接
+  缺失）；有效感受野 = min(radius, 第80近站距离) 的机制假设。
+- **干预**：per-layer radius/neighbors 调度 [400/700/1000/1000]km ×
+  [80/48/32/24]，参数形状不变（配对初始化与 single_da_09 逐位相同）、
+  同预算/损失；trial 全检查通过后 formal 43,840 步。
+- **结果**（s42，T2M）：总分 0.98940→0.98827；T2M 组 MSE −3.0%（其余组持平）；
+  空间分层：**<300km 桶 −3.2%→−5.4%（近场兑现率 57%→96%，几乎追平合成臂
+  −5.6%）**、站点 −7.0%→−10.4%、全球 −2.0%→−3.1%（×1.55）；300–1000km
+  桥接未实现（−1.7%/≈0）；无站点记忆。
+- **实现语义教训**：topk 永远选最近 k 站，radius 只是准入掩码——radius_schedule
+  在稠密区无效，本实验实测的是"邻居数调度"；真正的桥接需环形采样（两级邻域，
+  下一个假设）。另发现并修复评估错载 bug（load_state_dict 不含非参数超参，
+  见 step5/EVAL_BUG_NOTE.md；长期修复：checkpoint 内嵌运行时超参+评估锚点自检）。
+- **结论**：**近场增益幅度不足是结构可修复的**（一次调度改动兑现 96%）；
+  中距离桥接是剩余的结构缺口；H1 的结构维度进一步收窄。
+- **产物**：outputs/single_da_11_multiscale/、outputs/step5_multiscale_spatial/、
+  scripts/{run_single_da_11.py}、analysis.py schedule 参数。
+
+
 
 ## 附：支撑性研究结论（非实验，但指导了决策）
 

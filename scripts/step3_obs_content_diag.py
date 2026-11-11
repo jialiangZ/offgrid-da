@@ -58,7 +58,17 @@ SURFACE_IDX = {"2m_temperature": 2, "10m_u_component_of_wind": 0,
 
 def load_model(ckpt_path, device):
     ck = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-    model = CrossAttentionAnalysisModel(channels=82, **MODEL_CFG)
+    # Non-parameter architecture hyperparameters (radius/max_neighbors/schedules)
+    # are NOT stored in state_dict; recover them from the sibling config.json
+    # so models trained with schedule variants run with their own neighborhoods.
+    cfg = {"dim": 128, "heads": 8, "depth": 4, "injection": "layered",
+           "radius_km": 1000.0, "max_neighbors": 80, "query_chunk": 256}
+    cfg_path = Path(ckpt_path).parent / "config.json"
+    if cfg_path.exists():
+        for k in ("radius_km", "max_neighbors", "radius_schedule", "neighbors_schedule"):
+            if k in (mc := json.loads(cfg_path.read_text()).get("model", {})):
+                cfg[k] = mc[k]
+    model = CrossAttentionAnalysisModel(channels=82, **{k: v for k, v in cfg.items() if v is not None})
     model.load_state_dict(ck["model"])
     model.to(device).eval()
     return model
