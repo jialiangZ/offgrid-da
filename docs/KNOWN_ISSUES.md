@@ -36,6 +36,9 @@
 
 9. **训练未收敛警示**：single_da_09 与 step2 合成臂的 best_step 均为预算末步
    (43840)。配对结论不受影响，绝对数字解读需注明"未饱和"。
+   [已跟进 2026-11-10/11] 双臂匹配延长 5 epochs（single_da_10）：best_step
+   又停在新末步——系 **cosine LR 尾部效应**（末端每步微改善使 best 被动
+   跟随），非预算不足；延长只收回与局地基线缺口的 5%（real）/9.5%（syn）。
 
    Verified for T2M only in this round; re-verify for wind variables in Phase 5.
 

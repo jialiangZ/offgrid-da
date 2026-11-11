@@ -16,7 +16,10 @@
 | 观测诊断（创新量分解 + 合成观测四臂对照） | ✅ | `outputs/obs_diagnostics_2021`、`outputs/step2_*`（2026-11-08~09） |
 | 合成观测 DA 匹配训练 | ✅ | `scripts/train_step2_synthetic.py` |
 | 2023 独立确认 | ✅ DA −1.3% vs free（2.280/2.282 vs 2.311，双种子/留出站/区域一致） | `outputs/cycling_t2m_06_confirm_2023` |
-| 观测替换诊断（零创新/注意力关闭） | ⬜ 下一步 | 方案 §五 |
+| 观测替换诊断（零创新/打乱/注意力关）+ 空间分层 | ✅ 收益全走注意力、位置净贡献 0、集中 <300km 桶 | `outputs/step3_*`（方案 §五/§六） |
+| 脉冲响应探针 | ✅ 稠密区 400km / 稀疏区 1200km 足迹 | `outputs/step3_impulse` |
+| 延长训练预算检查（§四）| ✅ 双臂收回缺口 5%/9.5%，步数非主因 | `outputs/single_da_10_budget_extension` |
+| 噪声剂量-响应（§八扩展①）| ✅ k≈0.95 闭合两臂差距，H2 机制闭合 | `outputs/step4_noise_response` |
 | 预报模型升级（AIFS 质量上限线） | ⬜ 调研完成待实施 | EXPERIMENT_REGISTRY.md 附录 3 |
 
 ## 实验线索引
@@ -40,3 +43,8 @@
 | 合成观测 DA | 0.42928/0.42969 K | step2_synthetic_da |
 | 合成+局地基线（理想天花板）| 0.41720 K | step2_local_baseline |
 | 创新量噪声占比 | 94.8% | obs_diagnostics_2021 |
+| 零创新观测（仅位置）| ≈背景（位置净贡献 0）| step3_obs_content |
+| 收益空间分布 | <300km 桶 −3.1%/−5.6%（占 25.5% 格点）| step3_spatial |
+| 延长训练收回缺口 | real 5% / syn 9.5%（步数非主因）| single_da_10 |
+| 噪声剂量闭合点 | k≈0.95 时合成臂=真实臂水平 | step4_noise_response |
+| 2023 确认 cycling | DA 2.280/2.282 vs free 2.311（−1.3%）| cycling_t2m_06 |
