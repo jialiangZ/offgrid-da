@@ -5,12 +5,13 @@ Background-Aware Off-Grid Observation Assimilation with WeatherBench 2
 
 Residual single-cycle DA: `analysis = background + Δθ(background, off-grid observations)`.
 
-## Status (Round 1: M0 + M1 minimal pipeline)
+## Status (2026-11-13, pre-migration snapshot)
 
-- ✅ Phase 0 audit of the three live data sources (`docs/DATA_AUDIT.md`)
-- ✅ Single-cycle train/validation/test samples with train-only normalization (`docs/DATA_SPEC.md`)
-- ✅ 80 automated tests passing, incl. real-data leakage/QC/alignment checks
-- ⬜ Phase 2 model (background encoder + off-grid cross-attention + decoder)
+- ✅ Round 1 合成观测诊断收官（H1 结构 + H2 噪声剂量 k≈0.95 闭合）：`docs/SYNTH_OBS_ROUND1_FINAL.md`
+- ✅ 结构实验 single_da_11 双种子闭环：近场增益兑现率 57%→96–100%
+- ✅ AIFS-1.1 背景替换线 P2 强通过：T2M 0.3513 K vs ArchesWeather-250k 锚点 0.4414（−20%）
+- ⏳ P3（AIFS 背景 DA 匹配训练）已解锁待启动；2021 全年数据抽取暂停于 58%
+- 叙事总册：`docs/EXPERIMENT_REGISTRY.md`（阶段 0–5）｜迁移：`docs/MIGRATION_GUIDE.md`
 
 ## Setup
 
