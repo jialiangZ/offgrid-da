@@ -1,0 +1,53 @@
+description: |
+  AIFS-single 2.0
+
+checkpoint: aifs-single-mse-2.0.ckpt
+
+input: opendata
+
+pre_processors:
+  - forward-transform-filter: cos_sin_mean_wave_direction
+  - forward-transform-filter: # Mask fix
+      filter: apply-mask
+      param:
+        - sd
+        - swvl1
+        - swvl2
+      path: lsm.grib
+      mask_value: 0
+
+post_processors:
+  - backward-transform-filter: cos_sin_mean_wave_direction
+  - accumulate_from_start_of_forecast
+
+patch_metadata:
+  dataset:
+    constant_fields: [z, sdor, slor, lsm]
+
+use_grib_paramid: true
+allow_nans: true
+typed_variables:
+  mwd:
+    mars:
+      param: mwd
+      stream: wave
+      levtype: sfc
+  snowc: # Encoding fix
+    mars:
+      param: fscov
+      stream: oper
+      levtype: sfc
+  # fscov: # required for step0 copy
+  #   mars:
+  #     param: fscov
+  #     stream: oper
+  #     levtype: sfc
+
+output:
+  grib:
+    path: output.grib
+    encoding:
+      class: ai
+      type: fc
+      model: aifs-single
+      generatingProcessIdentifier: 5

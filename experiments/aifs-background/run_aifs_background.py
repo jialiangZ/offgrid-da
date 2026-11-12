@@ -85,7 +85,22 @@ def main():
     runner = SimpleRunner(CKPT, device=args.device)
 
     z_in, _ = find_matrix({"grid": (0.25, 0.25)}, {"grid": "N320"}, "linear")
-    z_out, out_shape = find_matrix({"grid": "N320"}, {"grid": (1.5, 1.5)}, "linear")
+    z_out, out_shape = find_matrix({"grid": "N320"}, {"grid": (1.5, 1.5)}, "linear")  # legacy, unused now
+    z_025, _ = find_matrix({"grid": "N320"}, {"grid": (0.25, 0.25)}, "linear")
+
+    def box7_stride6(a):
+        """7x7 box mean on 0.25deg (covers each 1.5deg cell), then stride-6 sample.
+
+        era5_240 is an area-averaged product (boxavg(ARCO) vs era5_240 = 0.08 K,
+        vs 0.44 K for linear point sampling): the box convention is the correct
+        spatial filter for anything compared against or consumed by the 1.5deg stack.
+        """
+        p = np.pad(a, ((0, 0), (3, 3), (3, 3)), mode="edge")
+        o = np.zeros((a.shape[0], 121, 240), dtype=np.float64)
+        for di in range(7):
+            for dj in range(7):
+                o += p[:, di:di + 721:6, dj:dj + 1440:6]
+        return (o / 49).astype(np.float32)
 
     consts = ensure_constants(in_dir.parent / "constants_0p25.npy")
     consts_n320 = (z_in @ consts.reshape(4, -1).T).T  # (4, 542080)
@@ -128,7 +143,7 @@ def main():
         result = list(runner.run(input_state=state, lead_time="6h"))[-1]
         out_fields = result["fields"]
         arr = np.stack([np.asarray(out_fields[n], dtype=np.float32) for n in out_names])  # (82, 542080)
-        grid = (z_out @ arr.T).T.reshape(82, *out_shape)
+        grid = box7_stride6((z_025 @ arr.T).T.reshape(82, 721, 1440))
         surface = grid[:4].reshape(4, 1, 121, 240)
         level = grid[4:].reshape(6, 13, 121, 240)
         if not np.isfinite(grid).all():
@@ -145,7 +160,7 @@ def main():
         "checkpoint": CKPT,
         "checkpoint_sha256": hashlib.sha256(Path(CKPT).read_bytes()).hexdigest(),
         "inputs": str(in_dir),
-        "regrid": "earthkit-regrid linear: 0.25->N320 (input), N320->1.5 (output)",
+        "regrid": "earthkit-regrid linear 0.25->N320 (input); output N320->0.25 linear then 7x7 box mean (era5_240 area-average convention)",
         "generator": str(Path(__file__).resolve()),
         "generated_at_unix": time.time(),
         "channel_names": out_names,
