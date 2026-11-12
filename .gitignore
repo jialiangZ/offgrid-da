@@ -38,3 +38,10 @@ lightning_logs/
 # OS / IDE / secrets
 .DS_Store
 .env
+
+# AIFS background workspace: venvs, checkpoints, extracted data
+experiments/aifs-background/.venv/
+experiments/aifs-background/v1.1/.venv/
+experiments/aifs-background/**/*.ckpt
+experiments/aifs-background/data/
+experiments/aifs-background/output.grib
