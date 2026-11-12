@@ -23,6 +23,7 @@ git clone（代码/文档/配置，~几十 MB）
 | `outputs/step*/ outputs/cycling*/ outputs/synth*/` | ~1 GB | 评估报告、分层裁决、EVAL_BUG_NOTE | 实验证据 |
 | `outputs/normalization/` | 20 KB | norm_stats_train_2018_2020.json | 训练统计（可重算但必须逐位一致，直接带）|
 | `experiments/archesweather-reproduction/stats/` | ~1 MB | era5_norm_stats_1998_2017*.pt | 同上（freeze 已含快照，双保险）|
+| `experiments/archesweather-reproduction/swanlogs_archive.tar.gz` | 16 MB | ArchesWeather 训练遥测曲线 | 唯一训练过程记录（16M，tar.gz）|
 | `outputs/data_audit/` | 2 MB | Phase 0 审计产物 | 记录 |
 
 **rsync 命令**（旧机执行；排除可再生的重型子目录）：
