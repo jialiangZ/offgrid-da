@@ -7,7 +7,7 @@ For every 6h valid time t in the extracted input set:
   3. SimpleRunner (aifs-single-mse-1.1.ckpt) 6h forecast from t's perspective
      (input fields = stacked [t-6h, t] per anemoi multistep convention)
   4. regrid N320 -> 1.5deg (earthkit-regrid linear weights, batched, 82ch)
-  5. write state_YYYYMMDDThh.npz in the exact format of
+  5. write state_YYYYMMDDThh.npz (zlib) in the exact format of
      outputs/single_da_05_input82_ablation/backgrounds/ (surface/level/lat/lon/pressure)
 
 Manifest mirrors the existing schema with AIFS provenance fields.
@@ -26,6 +26,9 @@ import torch
 from earthkit.regrid.db import find as find_matrix
 
 HERE = Path(__file__).resolve().parent
+import sys
+sys.path.insert(0, str(HERE))
+import zstd_io
 CKPT = str(HERE / "v1.1" / "aifs-single-mse-1.1.ckpt")  # run with v1.1/.venv
 REF_NPZ = Path("/home/jlzhang/Documents/offgrid-da/outputs/single_da_05_input82_ablation/backgrounds/state_20180101T00.npz")
 
@@ -38,16 +41,22 @@ CONSTANTS = {"lsm": "land_sea_mask", "z": "geopotential_at_surface",
 
 
 def ensure_constants(cache: Path) -> np.ndarray:
-    """Fetch the 4 constant fields once from ARCO (0.25 deg), shape (4, 721, 1440)."""
-    if cache.exists():
-        return np.load(cache)
+    """Fetch the 4 constant fields once from ARCO (0.25 deg), shape (4, 721, 1440).
+
+    `cache` may be given as either constants_0p25.npy or constants_0p25.npy.zst;
+    resolution prefers the .zst form (zstd-7, lossless).
+    """
+    stem = cache.name[:-8] if cache.name.endswith(".npy.zst") else cache.stem
+    cand = zstd_io.resolve(cache.parent, stem, "npy")
+    if cand.exists():
+        return zstd_io.load_array(cand)
     import xarray as xr
     ds = xr.open_zarr(ARCO, storage_options={"token": "anon"}, consolidated=True)
     t = "2021-01-01T00:00:00"
     arr = np.stack([ds[v].sel(time=[t]).values[0] for v in CONSTANTS.values()]).astype(np.float32)
     ds.close()
     assert arr.shape == (4, 721, 1440) and np.isfinite(arr).all()
-    np.save(cache, arr)
+    zstd_io.save_npy_zst(cand, arr)
     return arr
 IN_CHANNELS = json.loads((HERE / "data" / "aifs_inputs" / "meta_channels.json").read_text()) \
     if (HERE / "data" / "aifs_inputs" / "meta_channels.json").exists() else None
@@ -102,7 +111,7 @@ def main():
                 o += p[:, di:di + 721:6, dj:dj + 1440:6]
         return (o / 49).astype(np.float32)
 
-    consts = ensure_constants(in_dir.parent / "constants_0p25.npy")
+    consts = ensure_constants(in_dir.parent / "constants_0p25.npy")  # resolves .npy.zst or legacy .npy
     consts_n320 = (z_in @ consts.reshape(4, -1).T).T  # (4, 542080)
     const_fields = {name: np.stack([v, v]) for name, v in zip(CONSTANTS, consts_n320)}
 
@@ -114,12 +123,13 @@ def main():
     names = input_channel_names()
     out_names = SURFACE + [f"{b}_{lv}" for b in LEVEL_VARS for lv in PRESSURES]
 
-    files = sorted(in_dir.glob("??????????.npy"))
+    stamps = sorted({p.name[:10] for p in in_dir.glob("??????????.npy.zst")} |
+                    {p.name[:10] for p in in_dir.glob("??????????.npy")})
+    files = stamps
     if args.limit:
         files = files[:args.limit]
     t0 = time.time()
-    for k, f in enumerate(files):
-        stamp = f.stem  # YYYYMMDDHH = valid time t
+    for k, stamp in enumerate(files):
         import datetime as dt
         t = dt.datetime(int(stamp[:4]), int(stamp[4:6]), int(stamp[6:8]), int(stamp[8:10]))
         # The 6h forecast from inputs [t-6h, t] is valid at t+6h: this is x_b(t+6h).
@@ -127,12 +137,13 @@ def main():
         if dest.exists():
             continue
         t_prev = t - dt.timedelta(hours=6)
-        f_prev = in_dir / (t_prev.strftime("%Y%m%d%H") + ".npy")
+        f_prev = zstd_io.resolve(in_dir, t_prev.strftime("%Y%m%d%H"), "npy")
         if not f_prev.exists():
             print("SKIP (missing t-6h):", f_prev.name, flush=True)
             continue
-        cur = np.load(f, mmap_mode="r")
-        prev = np.load(f_prev, mmap_mode="r")
+        f_cur = zstd_io.resolve(in_dir, stamp, "npy")
+        cur = zstd_io.load_array(f_cur)
+        prev = zstd_io.load_array(f_prev)
         flat = np.empty((180, 721 * 1440), dtype=np.float32)
         flat[0::2] = np.asarray(prev, dtype=np.float32).reshape(90, -1)
         flat[1::2] = np.asarray(cur, dtype=np.float32).reshape(90, -1)
@@ -155,7 +166,7 @@ def main():
             print(f"{k+1}/{len(files)} ({rate*3600:.0f}/h) last={dest.name}", flush=True)
 
     manifest = {
-        "schema": "single_da_05 background npz (surface 4x1x121x240, level 6x13x121x240, physical units)",
+        "schema": "single_da_05 background npz (surface 4x1x121x240, level 6x13x121x240, physical units, zlib npz)",
         "model": "aifs-single-1.1 (ecmwf/aifs-single-1.1, CC BY 4.0)",
         "checkpoint": CKPT,
         "checkpoint_sha256": hashlib.sha256(Path(CKPT).read_bytes()).hexdigest(),

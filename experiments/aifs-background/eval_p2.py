@@ -30,7 +30,7 @@ extra = {"10u": (0, "10m_u_component_of_wind"), "msl": (3, "mean_sea_level_press
 extra_rmse = {k: [] for k in extra}
 
 for f in files:
-    stem = f.stem.replace("state_", "")  # YYYYMMDDTHH
+    stem = f.name.split(".")[0].replace("state_", "")  # YYYYMMDDTHH (works for .npz and .npz.zst)
     y, m, d, hh = int(stem[:4]), int(stem[4:6]), int(stem[6:8]), int(stem[9:11])
     doy = (np.datetime64(f"{y:04d}-{m:02d}-{d:02d}", "D")
            - np.datetime64(f"{y:04d}-01-01", "D")).astype(int)
@@ -61,6 +61,6 @@ print(f"\nanchor (ArchesWeather 2021): {ANCHOR}")
 verdict = "STRONG PASS (<0.38)" if r.mean() < 0.38 else ("PARTIAL (0.38-0.43)" if r.mean() < 0.43 else "STOP-AND-RECORD (>0.43)")
 monthly = {}
 for f, rr in zip(files, rmse_list):
-    monthly.setdefault(f.stem[10:12], []).append(rr)
+    monthly.setdefault(f.name.split(".")[0][10:12], []).append(rr)
 print("monthly means:", {k: round(float(np.mean(v)), 4) for k, v in sorted(monthly.items())})
 print(f"interim verdict: {verdict}")

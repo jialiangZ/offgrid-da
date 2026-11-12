@@ -5,9 +5,10 @@ AIFS-single-1.1 consumes 90 prognostic channels (verified from checkpoint):
 12 surface + 6 vars x 13 levels. All are available in ARCO v3
 (gs://gcp-public-data-arco-era5/ar/full_37-1h-0p25deg-chunk-1.zarr-v3).
 
-Storage: one uncompressed .npy per 6h timestep, shape (90, 721, 1440) float32,
-latitude 90->-90, longitude 0->359.75 (ARCO native layout, same convention as
-the official notebook's Open Data path). ~542 GB for 4 years, ~136 GB/year.
+Storage: one zstd-7 compressed .npy.zst per 6h timestep (lossless, ~1.8x), shape
+(90, 721, 1440) float32, latitude 90->-90, longitude 0->359.75 (ARCO native
+layout, same convention as the official notebook's Open Data path).
+~291 GB/year, ~1.16 TB for 4 years.
 
 Usage: prepare_aifs_inputs.py --year 2021 [--data-root ../data/aifs_inputs]
 Run with the repo .venv (xarray/gcsfs; zarr reads unaffected by the gcsfs bug).
@@ -17,7 +18,11 @@ import json
 import time
 from pathlib import Path
 
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 import numpy as np
+import zstd_io
 import xarray as xr
 
 ARCO = "gs://gcp-public-data-arco-era5/ar/full_37-1h-0p25deg-chunk-1.zarr-v3"
@@ -57,7 +62,7 @@ def main():
     n_ch = len(MAP) + len(P3D) * len(LEVELS)
     assert n_ch == 90, n_ch
 
-    meta = {"arco": ARCO, "year": args.year, "layout": "float32 (90, 721, 1440), lat 90->-90, lon 0->359.75",
+    meta = {"arco": ARCO, "year": args.year, "layout": "float32 (90, 721, 1440), lat 90->-90, lon 0->359.75, zstd-7 .npy.zst",
             "channels": list(MAP.keys()) + [f"{b}_{lv}" for b in P3D for lv in LEVELS],
             "map": {k: v[0] for k, v in MAP.items()}, "map_3d": P3D, "levels": LEVELS,
             "constants": "lsm/sdor/slor/z embedded in checkpoint (not stored here)"}
@@ -71,8 +76,9 @@ def main():
         base = np.datetime64(f"{args.year}-01-01T00:00:00", "ns") + np.timedelta64(day, "D")
         for hh in (0, 6, 12, 18):
             t = base + np.timedelta64(hh, "h")
-            dest = out_dir / f"{str(t)[:13].replace('-', '').replace('T', '')}.npy"
-            if dest.exists():
+            stem = str(t)[:13].replace('-', '').replace('T', '')
+            dest = out_dir / (stem + ".npy.zst")
+            if dest.exists() or (out_dir / (stem + ".npy")).exists():
                 continue
             surf = ds[surf_names].sel(time=[t]).load()
             p3d = ds[list(P3D.values())].sel(time=[t], level=LEVELS).load()
@@ -86,11 +92,9 @@ def main():
                 arr[i:i + 13] = a; i += 13
             if not np.isfinite(arr).all():
                 raise ValueError(f"nonfinite at {t}")
-            tmp = dest.with_suffix(".tmp.npy")
-            np.save(tmp, arr)
-            tmp.replace(dest)
+            zstd_io.save_npy_zst(dest, arr)
         if (day + 1) % 15 == 0:
-            gb = sum(f.stat().st_size for f in out_dir.glob("*.npy")) / 2**30
+            gb = sum(f.stat().st_size for f in list(out_dir.glob("*.npy")) + list(out_dir.glob("*.npy.zst"))) / 2**30
             rate = (day + 1) * 4 / (time.time() - t0)
             print(f"day {day+1}/{ndays}: {gb:.1f} GiB, {rate*3600:.0f} timesteps/h", flush=True)
     print("DONE", out_dir, flush=True)
