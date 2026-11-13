@@ -86,6 +86,8 @@ cd experiments/archesweather-reproduction/scripts
 ```bash
 .venv/bin/python scripts/prepare_multivar_metar.py     # 重建 outputs/metar_multivar_cache/
 ```
+⚠️ 依赖顺序：其 dataset 底层是 82ch 全状态输入——**必须在 §4.4 全状态背景完成之后跑**
+（否则 `Validated T2M/observation cache must already be complete` 报错）。
 - 验证锚点：每时次 `YYYYMMDDThh.pt`；站点角色划分 seed=42 与旧机一致
   （`norm_stats_train_2018_2020.json` 引用同一划分）。
 
