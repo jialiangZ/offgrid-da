@@ -86,8 +86,16 @@ cd experiments/archesweather-reproduction/scripts
 ```bash
 .venv/bin/python scripts/prepare_multivar_metar.py     # 重建 outputs/metar_multivar_cache/
 ```
-⚠️ 依赖顺序：其 dataset 底层是 82ch 全状态输入——**必须在 §4.4 全状态背景完成之后跑**
-（否则 `Validated T2M/observation cache must already be complete` 报错）。
+⚠️ 依赖顺序（实证版）：
+1. §4.4 全状态背景完成（否则 `cache must already be complete` 报错）
+2. `arches_backgrounds_{train_2018_2020,val_2021}/` 必须存在——与 bg_t2m_* 是
+   **同名不同目录的两个家族**（LazyArchesDataset/single_cycle_* 读前者，
+   evaluate/cycling 读后者），同一生成器产物，直接硬链接即可：
+   `cp -al outputs/bg_t2m_train_2018_2020/. outputs/arches_backgrounds_train_2018_2020/`
+   `cp -al outputs/bg_t2m_val_2021/. outputs/arches_backgrounds_val_2021/`
+3. `da_sample_cache` 预热（否则同上报错）：
+   `.venv/bin/python scripts/warmup_da_cache.py --workers 8`（从 WB2 云端拉
+   era5/metar 参考与观测，本地缓存 outputs/cache）
 - 验证锚点：每时次 `YYYYMMDDThh.pt`；站点角色划分 seed=42 与旧机一致
   （`norm_stats_train_2018_2020.json` 引用同一划分）。
 
