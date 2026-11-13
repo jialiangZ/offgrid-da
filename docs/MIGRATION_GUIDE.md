@@ -72,7 +72,9 @@ cd experiments/archesweather-reproduction/scripts
 # （prepare_data.sh 依赖已丢弃的 geoarches/data-venv，改用等价重写脚本，root venv 可跑）
 ../../.venv/bin/python prepare_era5_1998_2020.py
 ../../.venv/bin/python prepare_era5_2021_2022.py   # 2021-2022
-../../.venv/bin/python prepare_era5_2023_arco.py   # 2023（ARCO v3 重网格版）
+# 2023（ARCO v3 保守重网格版；裸跑会静默空转，必须显式 flag + geoarches venv）
+../geoarches/.venv/bin/python prepare_era5_2023_arco.py --validate-2022
+../geoarches/.venv/bin/python prepare_era5_2023_arco.py --make-2023
 ```
 注意：`tests/conftest.py` 已把 `scripts/` 加入 sys.path（修复 `from error_balanced import` 的可移植性）。
 - **约定要点**：此数据是**面积平均（conservative/boxavg）约定**——一切与它对比或
