@@ -36,7 +36,15 @@ def main():
     experiment = ROOT / 'experiments/archesweather-reproduction'
     geo = experiment / 'geoarches'
     freeze = json.loads((ROOT / 'outputs/forecast_freeze/archesweather_250k_20261031/manifest.json').read_text())
+    fz_dir = ROOT / 'outputs/forecast_freeze/archesweather_250k_20261031'
     ckpt, config, stats_path = [Path(freeze[k][p]) for k, p in [('checkpoint', 'path'), ('config', 'source'), ('normalization', 'source')]]
+    # migration fallback: original geoarches/stats paths were dropped; the freeze dir is self-contained
+    if not ckpt.exists():
+        ckpt = fz_dir / 'checkpoint.ckpt'
+    if not config.exists():
+        config = fz_dir / freeze['config']['snapshot']
+    if not stats_path.exists():
+        stats_path = fz_dir / freeze['normalization']['snapshot']
     for path, key in [(ckpt, 'checkpoint'), (config, 'config'), (stats_path, 'normalization')]:
         if digest(path) != freeze[key]['sha256']:
             raise ValueError('Frozen forecast file changed')

@@ -17,7 +17,11 @@ def sha(path):
  return h.hexdigest()
 def save_json(path,obj):
  tmp=path.with_suffix('.json.tmp'); tmp.write_text(json.dumps(obj,indent=2)+'\n'); os.replace(tmp,path)
-f=json.loads((root/'outputs/forecast_freeze/archesweather_250k_20261031/manifest.json').read_text()); ck=Path(f['checkpoint']['path']); config=Path(f['config']['source']); sp=Path(f['normalization']['source'])
+f=json.loads((root/'outputs/forecast_freeze/archesweather_250k_20261031/manifest.json').read_text()); fz=root/'outputs/forecast_freeze/archesweather_250k_20261031'; ck=Path(f['checkpoint']['path']); config=Path(f['config']['source']); sp=Path(f['normalization']['source'])
+# migration fallback: original geoarches/stats paths were dropped; the freeze dir is self-contained
+if not ck.exists(): ck=fz/'checkpoint.ckpt'
+if not config.exists(): config=fz/f['config']['snapshot']
+if not sp.exists(): sp=fz/f['normalization']['snapshot']
 for path,key in [(ck,'checkpoint'),(config,'config'),(sp,'normalization')]:
  if sha(path)!=f[key]['sha256']: raise RuntimeError('frozen hash mismatch: '+str(path))
 start=np.datetime64(args.start,'h'); end=np.datetime64(args.end,'h')
