@@ -115,10 +115,18 @@ CUDA_VISIBLE_DEVICES=0 ANEMOI_INFERENCE_NUM_CHUNKS=32 \
 - **验收锚点（预注册）**：T2M **0.3513 K**（552 时次 Jan–May 实测；锚点 0.441409，
   强通过门 <0.38）。全年数字待抽取完成后补终章。
 
-### 4.6 复训 ArchesWeather（仅当需要，一般不需要）
+### 4.6 geoarches 环境（⚠️ 背景再生也需要，非仅复训）
+`generate_arches_backgrounds.py` / `generate_full_state_backgrounds.py` 均 import
+`geoarches.dataloaders`——§4.4 的背景重建**前置依赖本节**。重建（freeze 自含 patch）：
 GeoArches 钉在 `fb2285fc…`（manifest 内含 worktree patch 快照）；
-按 `experiments/archesweather-reproduction/LOCAL_REPRO_NOTES.md` +
-`scripts/prepare_train_env.sh` 重建（PyTorch 2.5.1+cu124、bf16-mixed）。
+```bash
+cd experiments/archesweather-reproduction
+git clone https://github.com/geoarches/geoarches.git geoarches
+cd geoarches && git checkout fb2285fc960fca9f11b2b8d0126deba810f87895
+git apply ../../../outputs/forecast_freeze/archesweather_250k_20261031/geoarches_worktree.patch
+../../scripts/prepare_train_env.sh   # uv sync --frozen + torch 2.5.1+cu124 + 自检
+```
+（复训才需要 modelstore 数据，~25 GB；仅推理生成背景不需要。）
 
 ### 4.7 AIFS-1.1 运行环境（v1.1 venv，版本必须精确对齐）
 ```bash
