@@ -18,7 +18,7 @@ git clone（代码/文档/配置，~几十 MB）
 
 | 路径 | 大小 | 内容 | 为什么不可再生 |
 |---|---:|---|---|
-| `outputs/forecast_freeze/archesweather_250k_20261031/` | 1.0 GB | **自含**：ckpt+config+norm stats+manifest（sha256 已验证 267641e1…）| 自训模型，DA 契约锚点 |
+| `outputs/forecast_freeze/archesweather_250k_20261031/` | 1.0 GB | **自含**：ckpt+config+norm stats+manifest（sha256 已验证 267641ee…）| 自训模型，DA 契约锚点 |
 | `outputs/single_da_*/`（去掉 backgrounds）| ~2.5 GB | 各实验 best.pt + result.json + 评估报告 | 匹配训练产物（证据链 + 复评能力）|
 | `outputs/step*/ outputs/cycling*/ outputs/synth*/` | ~1 GB | 评估报告、分层裁决、EVAL_BUG_NOTE | 实验证据 |
 | `outputs/normalization/` | 20 KB | norm_stats_train_2018_2020.json | 训练统计（可重算但必须逐位一致，直接带）|
@@ -69,10 +69,12 @@ uv pip install --python .venv/bin/python torch --index-url https://download.pyto
 ```bash
 cd experiments/archesweather-reproduction/scripts
 # 1998-2020：官方 WB2 240x121 conservative zarr → 分片（校验：尺寸/变量/有限值）
-./prepare_data.sh                       # 主入口（分年下载+validate）
-python prepare_era5_2021_2022.py        # 2021-2022（含 2023-01 头）
-python prepare_era5_2023_arco.py        # 2023（ARCO v3 重网格版）
+# （prepare_data.sh 依赖已丢弃的 geoarches/data-venv，改用等价重写脚本，root venv 可跑）
+../../.venv/bin/python prepare_era5_1998_2020.py
+../../.venv/bin/python prepare_era5_2021_2022.py   # 2021-2022
+../../.venv/bin/python prepare_era5_2023_arco.py   # 2023（ARCO v3 重网格版）
 ```
+注意：`tests/conftest.py` 已把 `scripts/` 加入 sys.path（修复 `from error_balanced import` 的可移植性）。
 - **约定要点**：此数据是**面积平均（conservative/boxavg）约定**——一切与它对比或
   喂给 DA 的场必须用同约定（AIFS 侧已内置 N320→0.25°→7×7 盒平均，勿改回线性）。
 - 验证锚点：104 个 `era5_240_{year}_{h}h.nc`；单点抽查 `2m_temperature` 与
@@ -150,7 +152,7 @@ uv pip install --python v1.1/.venv "https://github.com/Dao-AILab/flash-attention
 ## 6. 验证清单（迁移成功的判据）
 
 1. `pytest -q` 全绿（数据无关的 80 项）
-2. `sha256sum outputs/forecast_freeze/…/checkpoint.ckpt` = `267641e1f051…`
+2. `sha256sum outputs/forecast_freeze/…/checkpoint.ckpt` = `267641ee1f0512a6ef38e4b0ccd7167b6fe64d7f1fbb5a199dd675a6b0c3d230`
 3. era5_240 重备后：任取一年的 result.json 复评入口可跑通（`scripts/step3_spatial_stratification.py --stride 4`）
 4. AIFS 背景重备后：`eval_p2.py` 输出 T2M ≈ 0.35 ± 0.01（同种子确定性，
    允许 GPU 代差带来的小抖动）

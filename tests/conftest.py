@@ -13,6 +13,7 @@ import pandas as pd
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 from offgrid_da.data.dataset import SingleCycleDADataset  # noqa: E402
 from offgrid_da.utils.config import load_config  # noqa: E402
