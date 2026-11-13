@@ -149,3 +149,7 @@ ARCO v3 缺 6 个半周期波高带通道（h1012-h2530）。单次起报（2026
   data/bg_aifs_2021_linearconv 保留为约定失配对照证据
 - 生成实测 6.1s/时次（zstd 解码 +1.1s + 盒平均输出路径 +0.6s vs 旧 4.4s）
 - 下一步：全年抽取完成（~26h）→ 补生成 May-Dec → 全年 P2 终章 → P3 解锁
+
+## v1.1 ckpt 重下 sha256（迁移重建，2026-11-14）
+`6acedcd2baee0e4a9ac6e8a9193b594247305801a26932aca5a3dee49ac3da8c`
+（HF 重下后 AnemoiModelInterface 加载通过；功能验证 = 首批背景 RMSE ≈ 0.35 锚点）

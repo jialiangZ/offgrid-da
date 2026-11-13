@@ -131,7 +131,7 @@ git apply ../../../outputs/forecast_freeze/archesweather_250k_20261031/geoarches
 ### 4.7 AIFS-1.1 运行环境（v1.1 venv，版本必须精确对齐）
 ```bash
 cd experiments/aifs-background/v1.1
-# ckpt 从 HuggingFace 重下（sha256 校验见 manifest.json / P0_NOTES.md）
+# ckpt 从 HuggingFace 重下（sha256 = 6acedcd2baee0e4a9ac6e8a9193b594247305801a26932aca5a3dee49ac3da8c，见 P0_NOTES.md）
 curl -L -o aifs-single-mse-1.1.ckpt "https://huggingface.co/ecmwf/aifs-single-1.1/resolve/main/aifs-single-mse-1.1.ckpt"
 cd .. && uv venv v1.1/.venv --python 3.12
 uv pip install --python v1.1/.venv "torch==2.4.1" "torch-geometric==2.4.0" \
