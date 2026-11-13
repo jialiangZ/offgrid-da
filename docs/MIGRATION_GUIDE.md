@@ -122,7 +122,7 @@ GeoArches 钉在 `fb2285fc…`（manifest 内含 worktree patch 快照）；
 ```bash
 cd experiments/archesweather-reproduction
 git clone https://github.com/INRIA/geoarches.git geoarches
-cd geoarches && git checkout fb2285fc960fca9f11b2b8d0126deba810f87895
+cd geoarches && git checkout fb2285fc960fca4a42ae6d3cfaadabbe68318544
 git apply ../../../outputs/forecast_freeze/archesweather_250k_20261031/geoarches_worktree.patch
 ../../scripts/prepare_train_env.sh   # uv sync --frozen + torch 2.5.1+cu124 + 自检
 ```

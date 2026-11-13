@@ -1,6 +1,6 @@
 # Local reproduction adjustments
 
-The upstream GeoArches checkout remains pinned at v0.2.2 commit fb2285fc960fca9f11b2b8d0126deba810f87895. The original 20-year patch is saved in patches/archesweather-20year.patch; the combined 20-year and 6-hour patch is saved in patches/archesweather-20year-6h.patch.
+The upstream GeoArches checkout remains pinned at v0.2.2 commit fb2285fc960fca4a42ae6d3cfaadabbe68318544  # 2026-11-14 修正：原记录尾部抄错，经 GitHub API 验证. The original 20-year patch is saved in patches/archesweather-20year.patch; the combined 20-year and 6-hour patch is saved in patches/archesweather-20year-6h.patch.
 
 - Training years: 1998-2017 inclusive (20 years).
 - Recent-data fine-tuning: 2007-2017 inclusive.
