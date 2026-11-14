@@ -291,6 +291,22 @@
 - **产物**：outputs/single_da_11_multiscale/、outputs/step5_multiscale_spatial/、
   scripts/{run_single_da_11.py}、analysis.py schedule 参数。
 
+### S6 独立时段确认 2022（2026-11-15，完成）
+- **动机**：single_da_11 的近场增益与"中距离无桥接"结论此前仅 2021 验证年支持，
+  需独立时段复现后才可入收官叙事。
+- **做法**：2022 全年 stride-4（365 周期）真实 METAR；全州 82ch 背景 1460 再生成
+  （生成器参数化 --start/--end）；评估器 eval_independent_2022.py 先过 2021 锚点
+  自检（±0.0005 复现 step4/step5，排除 EVAL_BUG 类错载）。
+- **结果**（T2M）：da_09 −2.5%（s42/s43 一致）；**da_11 −3.6%/−3.8%**，配对差
+  −0.0045/−0.0056 K（2021 为 −0.0047/−0.0049）；<300km 桶 da_09 −3.8% → da_11
+  **−6.0/−6.4%**；300–1000km da_11≈da_09（桥接仍缺）；留出/训练站零差距；
+  u10/mslp 持平；82ch score 一致小胜。
+- **结论**：**独立年完整复现**——近场结构改善稳固（×1.5 放大、非种子彩票、非年份
+  特异）；中距离桥接缺失与无站点记忆同样稳固。环形邻域 v2 假设维持待验。
+- **产物**：outputs/step6_independent_2022/{results_2022.json,results_2021.json,
+  report.md,eval_2022.log}、outputs/fullstate_backgrounds_test_2022/、
+  scripts/eval_independent_2022.py。
+
 
 
 ## 阶段 5：AIFS 背景替换线（2026-11-11~13，P2 强通过，P3 解锁待启动）
