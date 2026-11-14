@@ -17,7 +17,19 @@ def main():
     stats=json.loads(stats_path.read_text());assert stats['complete'] and stats['cycles']==4384
     settings=json.loads(Path(sys.argv[sys.argv.index('--config')+1]).read_text())
     assert settings['loss_statistics_sha256']==digest(stats_path)
-    trainer.LazyArchesDataset=Data;trainer.CachedSamples=lambda d:d;trainer.single_cycle_collate=multivar_collate
+    experiment=None
+    if '--experiment' in sys.argv:
+        i=sys.argv.index('--experiment');experiment=Path(sys.argv[i+1]);del sys.argv[i:i+2]
+        import run_full_update_v1 as _rfu
+        class ExpData(_rfu.Data):
+            def __init__(self,root,split):
+                from offgrid_da.data.multivar_dataset import MultivarMetarDataset
+                MultivarMetarDataset.__init__(self,root,split,experiment=experiment)
+                self.signature=__import__('hashlib').sha256((self.signature+Path(_rfu.__file__).read_text()).encode()).hexdigest()
+        trainer.LazyArchesDataset=ExpData
+    else:
+        trainer.LazyArchesDataset=Data
+    trainer.CachedSamples=lambda d:d;trainer.single_cycle_collate=multivar_collate
     original=trainer.DataLoader
     def loader(*a,**kw):
         kw.update(num_workers=2,multiprocessing_context='spawn',persistent_workers=True,prefetch_factor=2)

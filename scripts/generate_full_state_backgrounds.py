@@ -132,10 +132,10 @@ def main():
                   'file': name, 'sha256': digest(args.output / name)}
         metadata['samples'].append(sample)
         atomic_json(path, metadata)
-        print(f'{len(metadata["samples"])}/5844 {iso}', flush=True)
+        print(f'{len(metadata["samples"])}/{len(times)} {iso}', flush=True)
     metadata['samples'].sort(key=lambda x: x['valid_utc'])
     actual = [s['valid_utc'] for s in metadata['samples']]
-    expected = [np.datetime_as_string(t, unit='s') + 'Z' for t in np.arange(np.datetime64('2018-01-01T00', 'ns'), np.datetime64('2022-01-01T00', 'ns'), np.timedelta64(6, 'h'))]
+    expected = [np.datetime_as_string(t, unit='s') + 'Z' for t in np.arange(np.datetime64(args.start, 'ns'), np.datetime64(args.end, 'ns'), np.timedelta64(6, 'h'))]
     metadata['complete'] = actual == expected
     atomic_json(path, metadata)
     print('GENERATION', 'COMPLETE' if metadata['complete'] else 'DIAGNOSTIC PARTIAL', len(actual), flush=True)
