@@ -32,6 +32,8 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--device', default='cuda:0')
     parser.add_argument('--limit', type=int, default=0, help='Diagnostic only; no complete status for a limited run')
+    parser.add_argument('--start', default='2018-01-01T00', help='valid-time range start (inclusive)')
+    parser.add_argument('--end', default='2022-01-01T00', help='valid-time range end (exclusive)')
     args = parser.parse_args()
     experiment = ROOT / 'experiments/archesweather-reproduction'
     geo = experiment / 'geoarches'
@@ -58,10 +60,12 @@ def main():
               'channel_names': CHANNELS, 'surface_variables': SURFACE, 'level_variables': LEVEL,
               'pressure_hpa': PRESSURE, 'surface_units': ['m/s', 'm/s', 'K', 'Pa'],
               'level_units': ['m2/s2', 'm/s', 'm/s', 'K', 'kg/kg', 'Pa/s'],
-              'valid_interval': ['2018-01-01T00:00:00Z', '2022-01-01T00:00:00Z'],
+              'valid_interval': [np.datetime64(args.start, 'ns').astype('datetime64[s]').astype(str) + 'Z',
+                                 np.datetime64(args.end, 'ns').astype('datetime64[s]').astype(str) + 'Z'],
               'lead_hours': 6, 'init_history': 'ERA5 t-6h,t -> forecast t+6h',
               'latitude': '90 to -90', 'longitude': '0 to 358.5', 'precision': 'float32; TF32 disabled',
-              'expected_cycles': 5844, 'test_2022_used': False}
+              'expected_cycles': int((np.datetime64(args.end, 'ns') - np.datetime64(args.start, 'ns')) / np.timedelta64(6, 'h')),
+              'test_2022_used': False}
     args.output.mkdir(parents=True, exist_ok=True)
     lock = (args.output / 'generation.lock').open('a')
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -91,7 +95,7 @@ def main():
     data = Era5Forecast(path=str(experiment / 'data/era5_240/full'), domain='all', multistep=0,
                         lead_time_hours=6, load_prev=True, norm_scheme='train_stats', norm_stats_path=str(stats_path))
     mapping = {data.id2pt[i + 1][2]: i for i in range(len(data))}
-    times = np.arange(np.datetime64('2018-01-01T00', 'ns'), np.datetime64('2022-01-01T00', 'ns'), np.timedelta64(6, 'h'))
+    times = np.arange(np.datetime64(args.start, 'ns'), np.datetime64(args.end, 'ns'), np.timedelta64(6, 'h'))
     if args.limit:
         times = times[:args.limit]
     for valid in times:
