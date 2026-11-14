@@ -9,7 +9,7 @@ Residual single-cycle DA: `analysis = background + Δθ(background, off-grid obs
 
 - ✅ Round 1 合成观测诊断收官（H1 结构 + H2 噪声剂量 k≈0.95 闭合）：`docs/SYNTH_OBS_ROUND1_FINAL.md`
 - ✅ 结构实验 single_da_11 双种子闭环：近场增益兑现率 57%→96–100%
-- ✅ AIFS-1.1 背景替换线 P2 强通过：T2M 0.3513 K vs ArchesWeather-250k 锚点 0.4414（−20%）
+- ⚠️ AIFS-1.1 背景替换线 P2 修正（2026-11-15）：原 0.3513 为权重规约伪影（×0.798）；配对口径 T2M 0.433 vs Arches 0.446（−2.9%），81/82 通道 AIFS 胜（风/气压 −15~17%），全年终章待出
 - ⏳ P3（AIFS 背景 DA 匹配训练）已解锁待启动；2021 全年数据抽取暂停于 58%
 - 叙事总册：`docs/EXPERIMENT_REGISTRY.md`（阶段 0–5）｜迁移：`docs/MIGRATION_GUIDE.md`
 

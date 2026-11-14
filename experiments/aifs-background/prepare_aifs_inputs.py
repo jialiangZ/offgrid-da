@@ -55,6 +55,8 @@ P3D = {  # anemoi base -> ARCO 3D variable
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--year", type=int, required=True)
+    ap.add_argument("--start", default=None, help="YYYY-MM-DDThh; with --end, extracts this range instead of the whole year (e.g. 2017-12-31T18 tail for the 2018 train cycle)")
+    ap.add_argument("--end", default=None, help="YYYY-MM-DDThh, exclusive")
     ap.add_argument("--data-root", default=str(Path(__file__).resolve().parent / "data" / "aifs_inputs"))
     args = ap.parse_args()
     out_dir = Path(args.data_root) / str(args.year)
@@ -71,11 +73,17 @@ def main():
     ds = xr.open_zarr(ARCO, storage_options={"token": "anon"}, consolidated=True)
     surf_names = [v[0] for v in MAP.values()]
     t0 = time.time()
-    ndays = 365 if args.year != 2020 else 366
-    for day in range(ndays):
-        base = np.datetime64(f"{args.year}-01-01T00:00:00", "ns") + np.timedelta64(day, "D")
-        for hh in (0, 6, 12, 18):
-            t = base + np.timedelta64(hh, "h")
+    if args.start or args.end:
+        t_start = np.datetime64(args.start or f"{args.year}-01-01T00:00:00", "ns")
+        t_end = np.datetime64(args.end or f"{args.year + 1}-01-01T00:00:00", "ns")
+        times = np.arange(t_start, t_end, np.timedelta64(6, "h"))
+    else:
+        ndays = 365 if args.year != 2020 else 366
+        times = [np.datetime64(f"{args.year}-01-01T00:00:00", "ns") + np.timedelta64(day, "D") + np.timedelta64(hh, "h")
+                 for day in range(ndays) for hh in (0, 6, 12, 18)]
+    done = 0
+    for t in times:
+            base = t
             stem = str(t)[:13].replace('-', '').replace('T', '')
             dest = out_dir / (stem + ".npy.zst")
             if dest.exists() or (out_dir / (stem + ".npy")).exists():
@@ -93,10 +101,11 @@ def main():
             if not np.isfinite(arr).all():
                 raise ValueError(f"nonfinite at {t}")
             zstd_io.save_npy_zst(dest, arr)
-        if (day + 1) % 15 == 0:
-            gb = sum(f.stat().st_size for f in list(out_dir.glob("*.npy")) + list(out_dir.glob("*.npy.zst"))) / 2**30
-            rate = (day + 1) * 4 / (time.time() - t0)
-            print(f"day {day+1}/{ndays}: {gb:.1f} GiB, {rate*3600:.0f} timesteps/h", flush=True)
+            done += 1
+            if done % 60 == 0:
+                gb = sum(f.stat().st_size for f in list(out_dir.glob("*.npy")) + list(out_dir.glob("*.npy.zst"))) / 2**30
+                rate = done / (time.time() - t0)
+                print(f"{done}/{len(times)} timesteps: {gb:.1f} GiB, {rate*3600:.0f}/h", flush=True)
     print("DONE", out_dir, flush=True)
 
 

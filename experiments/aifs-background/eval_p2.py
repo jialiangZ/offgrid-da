@@ -9,6 +9,14 @@ Pre-registered gate (vs ArchesWeather 2021 anchor 0.441409 K):
 Usage (.venv of repo root): python eval_p2.py [bg_dir]
 Evaluates every state_*.npz found; latitude convention: npz north-first (90->-90),
 era5_240 shards ascending (-90..90) -> flip reference.
+
+2026-11-15 CONVENTION FIX: area weighting now divides by sum(w)*lon (true
+cos-lat-weighted RMSE), matching the anchor's convention (single_da_05
+baseline0_rmse_K). The previous (err**2*w).mean() deflated all absolute values
+by sqrt(mean cos phi) ~ 0.798 - the published 0.3513 was therefore NOT
+comparable to the 0.4414 anchor (true value on those files ~0.440). Relative
+(boxavg vs linear) conclusions are unaffected. The paired per-channel
+comparison (eval_p2_paired82.py) is the authoritative P2 vehicle.
 """
 import sys
 from pathlib import Path
@@ -45,11 +53,11 @@ for f in files:
         return np.flipud(da.transpose("latitude", "longitude").values.astype(np.float64))
 
     err = d["surface"][2, 0].astype(np.float64) - ref_field("2m_temperature")
-    rmse_list.append(float(np.sqrt((err**2 * w).mean())))
+    rmse_list.append(float(np.sqrt((err**2 * w).sum() / (w.sum() * err.shape[1]))))
     bias_list.append(float(err.mean()))
     for k, (idx, var) in extra.items():
         e = d["surface"][idx, 0].astype(np.float64) - ref_field(var)
-        extra_rmse[k].append(float(np.sqrt((e**2 * w).mean())))
+        extra_rmse[k].append(float(np.sqrt((e**2 * w).sum() / (w.sum() * e.shape[1]))))
 
 r = np.array(rmse_list)
 print(f"n timesteps: {len(r)}  (Jan-Apr 2021 interim)")
