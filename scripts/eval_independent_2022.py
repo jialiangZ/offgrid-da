@@ -251,7 +251,7 @@ def main():
                                 for gi, g in enumerate(group_names)},
                "dist_rmse": {name: np.sqrt(dist_sse[:, :, k] / dist_den[None, :, k]).round(5).tolist()
                              for k, name in enumerate(CH)},
-               "station_rmse": {name: {r: np.sqrt(st_sse[:, r, k] / max(st_n[r], 1)).round(5).tolist()
+               "station_rmse": {name: {rname: np.sqrt(st_sse[:, r, k] / max(st_n[r], 1)).round(5).tolist()
                                        for r, rname in enumerate(("train", "heldout"))} for k, name in enumerate(CH)},
                "station_n": st_n.tolist()}
     out = Path(args.out)
