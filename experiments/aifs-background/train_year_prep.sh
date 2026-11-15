@@ -13,14 +13,21 @@ LOG=train_year_prep.log
 say() { echo "[$(date '+%m-%d %H:%M:%S')] $*" | tee -a "$LOG" >&2; }  # stderr: never captured by $(...) callers
 
 # ---------- GPU selection (shared machine: other users' jobs appear/grow anytime) ----------
-GPU_MIN_FREE_MIB=${GPU_MIN_FREE_MIB:-19500}  # measured peak ~18.4 GiB; 19.5 GiB keeps ~1 GiB headroom
+GPU_MIN_FREE_MIB=${GPU_MIN_FREE_MIB:-21000}  # MEASURED: one inference step allocates 18.34 GiB torch
+                                             # + a 2.07 GiB block => ~20.4 GiB process peak.
+                                             # NUM_CHUNKS does NOT lower this (tested 2/4/8/16/32/64/
+                                             # 128/256: all peak at 18.3-19.3 GiB and then OOM).
+                                             # Consequence: on a 24 GiB card that already hosts a
+                                             # ~3.8 GiB neighbour job (~20.2 GiB free) AIFS inference
+                                             # CANNOT fit -> pick_gpu waits for a genuinely free card.
+GPU_WAIT_TRIES=${GPU_WAIT_TRIES:-180}        # poll up to 3 h for a free card before giving up
 pick_gpu() {  # pick_gpu [tries] -> echoes a free device index; polls while cards are busy
   local tries=${1:-30} idx
   for _ in $(seq 1 "$tries"); do
     if idx=$($ROOT/.venv/bin/python "$ROOT/scripts/pick_gpu.py" --min-free-mib "$GPU_MIN_FREE_MIB" 2>>"$LOG"); then
       echo "$idx"; return 0
     fi
-    say "no GPU with >=${GPU_MIN_FREE_MIB}MiB free yet; retrying in 60s"
+    (( _ % 10 == 0 )) && say "no GPU with >=${GPU_MIN_FREE_MIB}MiB free yet (poll $_/${tries}); retrying in 60s"
     sleep 60
   done
   return 1
@@ -29,7 +36,7 @@ pick_gpu() {  # pick_gpu [tries] -> echoes a free device index; polls while card
 run_inference() {  # run_inference <inputs> <out> <tag> [logfile]; resumes via skip-if-exists
   local inputs=$1 out=$2 tag=$3 logf=${4:-$LOG} gpu rc attempt
   for attempt in 1 2 3; do
-    gpu=$(pick_gpu 30) || { say "$tag: ABORT - no GPU free for 30 min"; return 2; }
+    gpu=$(pick_gpu "$GPU_WAIT_TRIES") || { say "$tag: ABORT - no GPU with >=${GPU_MIN_FREE_MIB}MiB free after ${GPU_WAIT_TRIES}min"; return 2; }
     say "$tag: attempt $attempt on cuda:$gpu"
     CUDA_VISIBLE_DEVICES=$gpu ANEMOI_INFERENCE_NUM_CHUNKS=32 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True $VENV run_aifs_background.py \
       --inputs "$inputs" --out "$out" >> "$logf" 2>&1
@@ -105,6 +112,17 @@ EOF
 say "STAGE A PASSED (small-shard acceptance)"
 
 # ---------- continuous extraction ----------
+# Head backgrounds for year Y are produced from Y-1 Dec-31 12Z/18Z inputs, which
+# live in the previous year's directory -> hardlink them in before generating.
+# (2018's head came from Stage A, 2021's head/tail from the 2020 tail move above.)
+link_prev_tails() {
+  local prev=$1 cur=$2 STEM
+  for STEM in "${prev}123112" "${prev}123118"; do
+    [ -f "data/aifs_inputs/$prev/$STEM.npy.zst" ] || { say "ABORT: missing $prev tail $STEM"; return 1; }
+    [ -e "data/aifs_inputs/$cur/$STEM.npy.zst" ] || ln "data/aifs_inputs/$prev/$STEM.npy.zst" "data/aifs_inputs/$cur/$STEM.npy.zst"
+  done
+}
+
 for YEAR in 2018 2019 2020; do
   say "STAGE B: extracting $YEAR"
   $PY prepare_aifs_inputs.py --year $YEAR --workers 12 >> "prepare_inputs_$YEAR.log" 2>&1
@@ -112,13 +130,17 @@ for YEAR in 2018 2019 2020; do
   N=$(ls data/aifs_inputs/$YEAR/*.npy.zst 2>/dev/null | wc -l)
   say "year $YEAR extraction exit=$RC files=$N"
   if [ $RC -ne 0 ] || [ "$N" -lt 1460 ]; then say "ABORT: $YEAR incomplete ($N)"; exit 1; fi
+  if [ "$YEAR" != "2018" ]; then
+    link_prev_tails $((YEAR - 1)) "$YEAR" || { say "ABORT: $YEAR head inputs"; exit 1; }
+  fi
   say "STAGE C: generating $YEAR backgrounds (device picked at runtime)"
   run_inference data/aifs_inputs/$YEAR data/bg_aifs_train_$YEAR "bg-$YEAR" "bg_gen_$YEAR.log" \
     || { say "ABORT: $YEAR background generation failed"; exit 1; }
   NB=$(ls data/bg_aifs_train_$YEAR/*.npz 2>/dev/null | wc -l)
-  MIN=1464; [ "$YEAR" = "2020" ] || MIN=1460
+  MIN=1460; [ "$YEAR" = "2020" ] && MIN=1464   # 2020 is a leap year (366 x 4)
   say "year $YEAR backgrounds: $NB (min $MIN)"
   if [ "$NB" -lt "$MIN" ]; then say "ABORT: $YEAR backgrounds incomplete ($NB < $MIN)"; exit 1; fi
+  [ -f "data/bg_aifs_train_$YEAR/state_${YEAR}0101T00.npz" ] || { say "ABORT: $YEAR head background missing"; exit 1; }
 done
 say "final gate: assembling the single_da_12 background set (union must be complete)"
 $ROOT/.venv/bin/python $ROOT/scripts/assemble_aifs_backgrounds.py >> "$LOG" 2>&1 \
