@@ -129,8 +129,8 @@ say "smoke produced $N backgrounds"
 if [ "$SMOKE_DEFERRED" = "1" ]; then
   say "STAGE A data acceptance passed (GPU smoke deferred)"
 else
-say "verifying smoke T2M against era5"
-verify_smoke_rmse || exit 1
+  say "verifying smoke T2M against era5"
+  verify_smoke_rmse || exit 1
   say "STAGE A PASSED (small-shard acceptance, incl GPU smoke)"
 fi
 
