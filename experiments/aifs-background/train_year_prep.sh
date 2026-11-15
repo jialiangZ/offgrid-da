@@ -26,12 +26,13 @@ GPU_MIN_FREE_MIB=${GPU_MIN_FREE_MIB:-21000}  # MEASURED: one inference step hold
                                              # that is genuinely free.
 GPU_WAIT_TRIES=${GPU_WAIT_TRIES:-180}        # poll up to 3 h for a free card before giving up
 pick_gpu() {  # pick_gpu [tries] -> echoes a free device index; polls while cards are busy
-  local tries=${1:-30} idx
-  for _ in $(seq 1 "$tries"); do
+  local tries=${1:-30} idx n=0
+  while [ "$n" -lt "$tries" ]; do
+    n=$((n + 1))
     if idx=$($ROOT/.venv/bin/python "$ROOT/scripts/pick_gpu.py" --min-free-mib "$GPU_MIN_FREE_MIB" 2>>"$LOG"); then
       echo "$idx"; return 0
     fi
-    (( _ % 10 == 0 )) && say "no GPU with >=${GPU_MIN_FREE_MIB}MiB free yet (poll $_/${tries}); retrying in 60s"
+    [ $((n % 10)) -eq 1 ] && say "no GPU with >=${GPU_MIN_FREE_MIB}MiB free yet (poll ${n}/${tries}); retrying in 60s"
     sleep 60
   done
   return 1
