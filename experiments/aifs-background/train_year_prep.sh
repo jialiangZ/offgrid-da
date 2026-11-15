@@ -10,7 +10,36 @@ ROOT=/home/jlzhang/Documents/offgrid-da
 PY=$ROOT/.venv/bin/python
 VENV=$PWD/v1.1/.venv/bin/python
 LOG=train_year_prep.log
-say() { echo "[$(date '+%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
+say() { echo "[$(date '+%m-%d %H:%M:%S')] $*" | tee -a "$LOG" >&2; }  # stderr: never captured by $(...) callers
+
+# ---------- GPU selection (shared machine: other users' jobs appear/grow anytime) ----------
+GPU_MIN_FREE_MIB=${GPU_MIN_FREE_MIB:-19500}  # measured peak ~18.4 GiB; 19.5 GiB keeps ~1 GiB headroom
+pick_gpu() {  # pick_gpu [tries] -> echoes a free device index; polls while cards are busy
+  local tries=${1:-30} idx
+  for _ in $(seq 1 "$tries"); do
+    if idx=$($ROOT/.venv/bin/python "$ROOT/scripts/pick_gpu.py" --min-free-mib "$GPU_MIN_FREE_MIB" 2>>"$LOG"); then
+      echo "$idx"; return 0
+    fi
+    say "no GPU with >=${GPU_MIN_FREE_MIB}MiB free yet; retrying in 60s"
+    sleep 60
+  done
+  return 1
+}
+
+run_inference() {  # run_inference <inputs> <out> <tag> [logfile]; resumes via skip-if-exists
+  local inputs=$1 out=$2 tag=$3 logf=${4:-$LOG} gpu rc attempt
+  for attempt in 1 2 3; do
+    gpu=$(pick_gpu 30) || { say "$tag: ABORT - no GPU free for 30 min"; return 2; }
+    say "$tag: attempt $attempt on cuda:$gpu"
+    CUDA_VISIBLE_DEVICES=$gpu ANEMOI_INFERENCE_NUM_CHUNKS=32 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True $VENV run_aifs_background.py \
+      --inputs "$inputs" --out "$out" >> "$logf" 2>&1
+    rc=$?
+    [ $rc -eq 0 ] && return 0
+    say "$tag: attempt $attempt failed rc=$rc; re-picking GPU after 120s (resumes)"
+    sleep 120
+  done
+  return 1
+}
 
 # ---------- storage budget ----------
 FREE_GB=$(df --output=avail -B 1G /home | tail -1 | tr -d ' ')
@@ -44,9 +73,9 @@ mv data/aifs_inputs/2020/2020123112.npy.zst data/aifs_inputs/2020/2020123118.npy
 rmdir data/aifs_inputs/2017 2>/dev/null
 $PY verify_shard.py data/aifs_inputs/2018/201{7123112,7123118,8010100,8010106,8010112,8010118,8010200,8010206,8010212,8010218}.npy.zst data/aifs_inputs/2021/20201231{12,18}.npy.zst >> "$LOG" 2>&1 || { say "ABORT: shard verification failed"; exit 1; }
 say "shard verification passed; running inference smoke (2018 probe) + 2021 head regeneration"
-CUDA_VISIBLE_DEVICES=0 ANEMOI_INFERENCE_NUM_CHUNKS=32 $VENV run_aifs_background.py --inputs data/aifs_inputs/2018 --out data/bg_aifs_smoke_2018 >> "$LOG" 2>&1 \
+run_inference data/aifs_inputs/2018 data/bg_aifs_smoke_2018 smoke \
   || { say "ABORT: inference smoke failed"; exit 1; }
-CUDA_VISIBLE_DEVICES=0 ANEMOI_INFERENCE_NUM_CHUNKS=32 $VENV run_aifs_background.py --inputs data/aifs_inputs/2021 --out data/bg_aifs_2021 >> "$LOG" 2>&1 \
+run_inference data/aifs_inputs/2021 data/bg_aifs_2021 "2021-head" \
   || { say "ABORT: 2021 head regeneration failed"; exit 1; }
 for NEED in state_20210101T00.npz state_20211231T18.npz; do
   [ -f "data/bg_aifs_2021/$NEED" ] || { say "ABORT: bg_aifs_2021 missing $NEED"; exit 1; }
@@ -78,13 +107,14 @@ say "STAGE A PASSED (small-shard acceptance)"
 # ---------- continuous extraction ----------
 for YEAR in 2018 2019 2020; do
   say "STAGE B: extracting $YEAR"
-  $PY prepare_aifs_inputs.py --year $YEAR --workers 8 >> "prepare_inputs_$YEAR.log" 2>&1
+  $PY prepare_aifs_inputs.py --year $YEAR --workers 12 >> "prepare_inputs_$YEAR.log" 2>&1
   RC=$?
   N=$(ls data/aifs_inputs/$YEAR/*.npy.zst 2>/dev/null | wc -l)
   say "year $YEAR extraction exit=$RC files=$N"
   if [ $RC -ne 0 ] || [ "$N" -lt 1460 ]; then say "ABORT: $YEAR incomplete ($N)"; exit 1; fi
-  say "STAGE C: generating $YEAR backgrounds (GPU0)"
-  CUDA_VISIBLE_DEVICES=0 ANEMOI_INFERENCE_NUM_CHUNKS=32 $VENV run_aifs_background.py --inputs data/aifs_inputs/$YEAR --out data/bg_aifs_train_$YEAR >> "bg_gen_$YEAR.log" 2>&1
+  say "STAGE C: generating $YEAR backgrounds (device picked at runtime)"
+  run_inference data/aifs_inputs/$YEAR data/bg_aifs_train_$YEAR "bg-$YEAR" "bg_gen_$YEAR.log" \
+    || { say "ABORT: $YEAR background generation failed"; exit 1; }
   NB=$(ls data/bg_aifs_train_$YEAR/*.npz 2>/dev/null | wc -l)
   MIN=1464; [ "$YEAR" = "2020" ] || MIN=1460
   say "year $YEAR backgrounds: $NB (min $MIN)"

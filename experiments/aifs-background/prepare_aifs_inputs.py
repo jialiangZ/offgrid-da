@@ -10,8 +10,13 @@ Storage: one zstd-7 compressed .npy.zst per 6h timestep (lossless, ~1.8x), shape
 layout, same convention as the official notebook's Open Data path).
 ~291 GB/year, ~1.16 TB for 4 years.
 
-Usage: prepare_aifs_inputs.py --year 2021 [--data-root ../data/aifs_inputs]
+Usage: prepare_aifs_inputs.py --year 2021 [--data-root ../data/aifs_inputs] [--workers N]
 Run with the repo .venv (xarray/gcsfs; zarr reads unaffected by the gcsfs bug).
+
+Throughput (measured, 19-timestep windows on the shared host, GCS latency varies):
+workers=1 ~40/h | 8 ~155/h | 12 ~190/h | 16 ~195/h (saturates at ~12).
+Idempotent: existing shards are skipped, so a killed run resumes where it stopped.
+On the first failure remaining queued timesteps are cancelled (fail fast).
 """
 import argparse
 import json
@@ -99,8 +104,9 @@ def main():
     ap.add_argument("--start", default=None, help="YYYY-MM-DDThh; with --end, extracts this range instead of the whole year (e.g. 2017-12-31T18 tail for the 2018 train cycle)")
     ap.add_argument("--end", default=None, help="YYYY-MM-DDThh, exclusive")
     ap.add_argument("--data-root", default=str(Path(__file__).resolve().parent / "data" / "aifs_inputs"))
-    ap.add_argument("--workers", type=int, default=8,
-                    help="parallel timestep fetchers (ARCO is latency-bound: ~84 serial chunk GETs/timestep; workers hide it)")
+    ap.add_argument("--workers", type=int, default=12,
+                    help="parallel timestep fetchers (ARCO is latency-bound: ~84 serial chunk GETs/timestep). "
+                         "Measured on the shared host: 1 -> ~40/h, 8 -> ~155/h, 12 -> ~190/h, 16 -> ~195/h")
     args = ap.parse_args()
     out_dir = Path(args.data_root) / str(args.year)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -124,27 +130,40 @@ def main():
                  for day in range(ndays) for hh in (0, 6, 12, 18)]
     todo = [t for t in times if not (out_dir / (str(t)[:13].replace("-", "").replace("T", "") + ".npy.zst")).exists()]
     print(f"{len(todo)}/{len(times)} to fetch, workers={args.workers}", flush=True)
+    if not todo:
+        print(f"DONE {out_dir} (fetched 0, skipped {len(times)})", flush=True)
+        return
     done = 0
 
-    def progress():
+    def progress(ok=True):
         nonlocal done
+        if not ok:
+            return
         done += 1
         if done % 100 == 0:
             rate = done / (time.time() - t0)
-            print(f"{done}/{len(times)} timesteps, {rate * 3600:.0f}/h", flush=True)
+            print(f"{done}/{len(todo)} fetched, {rate * 3600:.0f}/h", flush=True)
 
     if args.workers > 1:
         from concurrent.futures import ProcessPoolExecutor, as_completed
-        with ProcessPoolExecutor(max_workers=args.workers, initializer=_init_worker) as pool:
-            futs = [pool.submit(fetch_one, t, str(out_dir)) for t in times]
+        pool = ProcessPoolExecutor(max_workers=args.workers, initializer=_init_worker)
+        futs = []
+        try:
+            futs = [pool.submit(fetch_one, t, str(out_dir)) for t in todo]
             for f in as_completed(futs):
-                f.result()
-                progress()
+                progress(f.result() == "ok")
+        except BaseException:
+            # fail fast: drop queued timesteps instead of draining the whole run
+            for f in futs:
+                f.cancel()
+            pool.shutdown(wait=True, cancel_futures=True)
+            raise
+        else:
+            pool.shutdown(wait=True)
     else:
-        for t in times:
-            fetch_one(t, str(out_dir))
-            progress()
-    print("DONE", out_dir, flush=True)
+        for t in todo:
+            progress(fetch_one(t, str(out_dir)) == "ok")
+    print(f"DONE {out_dir} (fetched {done}, skipped {len(times) - len(todo)})", flush=True)
 
 
 if __name__ == "__main__":
