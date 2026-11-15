@@ -134,10 +134,11 @@ verify_smoke_rmse || exit 1
   say "STAGE A PASSED (small-shard acceptance, incl GPU smoke)"
 fi
 
-# ---------- continuous extraction ----------
-# Head backgrounds for year Y are produced from Y-1 Dec-31 12Z/18Z inputs, which
-# live in the previous year's directory -> hardlink them in before generating.
-# (2018's head came from Stage A, 2021's head/tail from the 2020 tail move above.)
+# ---------- continuous extraction (network phase, runs to completion first) ----------
+# Two phases on purpose: extraction is network-bound and must not be blocked by a
+# busy GPU; background generation is GPU-bound and runs afterwards.
+# Head backgrounds for year Y need Y-1 Dec-31 12Z/18Z inputs, which live in the
+# previous year's directory -> hardlink them in.
 link_prev_tails() {
   local prev=$1 cur=$2 STEM
   for STEM in "${prev}123112" "${prev}123118"; do
@@ -156,19 +157,25 @@ for YEAR in 2018 2019 2020; do
   if [ "$YEAR" != "2018" ]; then
     link_prev_tails $((YEAR - 1)) "$YEAR" || { say "ABORT: $YEAR head inputs"; exit 1; }
   fi
-  if [ "$SMOKE_DEFERRED" = "1" ]; then
-    say "GPU smoke was deferred; waiting for a free card now (gates all backgrounds)"
-    run_inference data/aifs_inputs/2018 data/bg_aifs_smoke_2018 smoke \
-      || { say "ABORT: deferred inference smoke failed"; exit 1; }
-    run_inference data/aifs_inputs/2021 data/bg_aifs_2021 "2021-head" \
-      || { say "ABORT: 2021 head regeneration failed"; exit 1; }
-    verify_smoke_rmse || exit 1
-    for NEED in state_20210101T00.npz state_20211231T18.npz; do
-      [ -f "data/bg_aifs_2021/$NEED" ] || { say "ABORT: bg_aifs_2021 missing $NEED"; exit 1; }
-    done
-    say "deferred GPU smoke + 2021 head/tail verified"
-    SMOKE_DEFERRED=0
-  fi
+done
+say "EXTRACTION PHASE COMPLETE (2018-2020)"
+
+# ---------- background generation (GPU phase) ----------
+if [ "$SMOKE_DEFERRED" = "1" ]; then
+  say "GPU smoke was deferred; it must pass before any background is generated"
+  run_inference data/aifs_inputs/2018 data/bg_aifs_smoke_2018 smoke \
+    || { say "ABORT: deferred inference smoke failed"; exit 1; }
+  run_inference data/aifs_inputs/2021 data/bg_aifs_2021 "2021-head" \
+    || { say "ABORT: 2021 head regeneration failed"; exit 1; }
+  verify_smoke_rmse || exit 1
+  for NEED in state_20210101T00.npz state_20211231T18.npz; do
+    [ -f "data/bg_aifs_2021/$NEED" ] || { say "ABORT: bg_aifs_2021 missing $NEED"; exit 1; }
+  done
+  say "deferred GPU smoke + 2021 head/tail verified"
+  SMOKE_DEFERRED=0
+fi
+
+for YEAR in 2018 2019 2020; do
   say "STAGE C: generating $YEAR backgrounds (device picked at runtime)"
   run_inference data/aifs_inputs/$YEAR data/bg_aifs_train_$YEAR "bg-$YEAR" "bg_gen_$YEAR.log" \
     || { say "ABORT: $YEAR background generation failed"; exit 1; }
