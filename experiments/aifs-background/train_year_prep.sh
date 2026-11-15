@@ -78,7 +78,7 @@ say "STAGE A PASSED (small-shard acceptance)"
 # ---------- continuous extraction ----------
 for YEAR in 2018 2019 2020; do
   say "STAGE B: extracting $YEAR"
-  $PY prepare_aifs_inputs.py --year $YEAR >> "prepare_inputs_$YEAR.log" 2>&1
+  $PY prepare_aifs_inputs.py --year $YEAR --workers 8 >> "prepare_inputs_$YEAR.log" 2>&1
   RC=$?
   N=$(ls data/aifs_inputs/$YEAR/*.npy.zst 2>/dev/null | wc -l)
   say "year $YEAR extraction exit=$RC files=$N"
