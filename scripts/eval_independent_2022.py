@@ -172,6 +172,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--year", type=int, default=2022, choices=(2021, 2022))
     ap.add_argument("--stride", type=int, default=4)
+    ap.add_argument("--offset", type=int, default=0, help="first index = offset (stride-4 offsets 0/1/2/3 = daily 00/06/12/18Z)")
     ap.add_argument("--out", default="outputs/step6_independent_2022")
     ap.add_argument("--groups", default="all", help="'all' or comma list from " + ",".join(GROUPS))
     args = ap.parse_args()
@@ -185,8 +186,8 @@ def main():
     n_groups = len(group_names)
 
     ds = TestYearDataset(args.year)
-    idxs = list(range(0, len(ds), args.stride))
-    print(f"year {args.year}: {len(ds)} cycles, stride {args.stride} -> {len(idxs)} evaluated", flush=True)
+    idxs = list(range(args.offset, len(ds), args.stride))
+    print(f"year {args.year}: {len(ds)} cycles, stride {args.stride} offset {args.offset} -> {len(idxs)} evaluated", flush=True)
 
     latg, long = np.linspace(90, -90, 121), np.arange(240) * 1.5
     sse_global = np.zeros((n_groups, 82), dtype=np.float64)
@@ -244,7 +245,7 @@ def main():
                 print(f"{n + 1}/{len(idxs)} cycles", flush=True)
 
     rmse_global = np.sqrt(sse_global / den_global) * phys_std
-    results = {"year": args.year, "cycles": len(idxs), "stride": args.stride, "groups": group_names,
+    results = {"year": args.year, "cycles": len(idxs), "stride": args.stride, "offset": args.offset, "groups": group_names,
                "channels": list(CH), "bins_km": [list(BINS[:-1]) + ["inf"]],
                "global_surface_rmse": {g: {n: float(rmse_global[gi, c]) for n, c in CH.items()} for gi, g in enumerate(group_names)},
                "global_score": {g: float(metrics(sse_global[gi], den_global, loss_w, phys_std, CHANNELS)["score"])
@@ -256,7 +257,7 @@ def main():
                "station_n": st_n.tolist()}
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    (out / f"results_{args.year}.json").write_text(json.dumps(results, indent=1) + "\n")
+    (out / f"results_{args.year}_o{args.offset}.json").write_text(json.dumps(results, indent=1) + "\n")
     print(json.dumps(results["global_surface_rmse"], indent=1), flush=True)
 
 

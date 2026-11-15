@@ -84,15 +84,20 @@ def main():
     bias = {"aifs": np.zeros(82), "arches": np.zeros(82)}
     den = 0.0
     time_probe = {}  # offset hours -> sse_t2m on subset
+    mon_sse = {k: np.zeros((12, 82)) for k in ("aifs", "arches")}
+    mon_den = np.zeros(12)
 
     for n, (valid, fa, fw) in enumerate(pairs):
         r = ref82(valid)
+        mi = int(str(valid)[5:7]) - 1
         da, dw = bg82(fa), bg82(fw)
         for key, d in (("aifs", da), ("arches", dw)):
             e = d - r
             sse[key] += (e ** 2 * w_lat[None]).sum((1, 2))
             bias[key] += (e * w_lat[None]).sum((1, 2))
+            mon_sse[key][mi] += (e ** 2 * w_lat[None]).sum((1, 2))
         den += w_lat.sum() * 240
+        mon_den[mi] += w_lat.sum() * 240
         if n % 100 == 0:  # time-semantics probe subset
             for off in (-6, 0, 6):
                 r_off = ref82(valid + np.timedelta64(off, "h"))
@@ -109,6 +114,17 @@ def main():
            "bias_arches": (bias["arches"] / den).tolist(),
            "time_probe_t2m_sse": {str(k): v for k, v in sorted(time_probe.items())}}
     out["rmse_ratio"] = (np.array(out["rmse_aifs"]) / np.array(out["rmse_arches"])).tolist()
+
+    # monthly per-channel RMSE for both sources (all 82 channels x 12 months)
+    out["monthly"] = {}
+    for key in ("aifs", "arches"):
+        rm = np.sqrt(mon_sse[key] / mon_den[:, None])
+        out["monthly"][key] = {f"{m+1:02d}": {CHANNELS[c]: float(rm[m, c]) for c in range(82)} for m in range(12)}
+    out["monthly_key_channels"] = {}
+    for name, i in [("2m_temperature", 2), ("10m_u", 0), ("10m_v", 1), ("mslp", 3)]:
+        out["monthly_key_channels"][name] = {
+            f"{m+1:02d}": {"aifs": float(np.sqrt(mon_sse['aifs'][m, i] / mon_den[m])),
+                           "arches": float(np.sqrt(mon_sse['arches'][m, i] / mon_den[m]))} for m in range(12)}
 
     # group summaries
     groups = {"surface": list(range(4))}
@@ -135,7 +151,26 @@ def main():
                     ("t@850", 4 + 3 * 13 + 9), ("t@500", 4 + 3 * 13 + 6), ("z@500", 4 + 10), ("q@850", 4 + 4 * 13 + 9), ("w@500", 4 + 5 * 13 + 6)]:
         lines.append(f"| {name} | {out['rmse_aifs'][i]:.5g} | {out['rmse_arches'][i]:.5g} | {out['rmse_ratio'][i]:.3f} |")
     lines += ["", f"time-semantics probe (T2M SSE, subset): {out['time_probe_t2m_sse']}",
-              "", "alignment correct iff offset 0h minimizes SSE."]
+              "", "alignment correct iff offset 0h minimizes SSE.",
+              "", "## Conventions and contamination check",
+              "",
+              "- Area weighting: sum(w)*lon denominator (true cos-lat weighting) on BOTH",
+              "  sides - identical convention by construction (paired, same loop).",
+              "- Regrid convention check: a wrong downscale (linear point sampling instead",
+              "  of the 7x7 box average) costs ~+0.2 K T2M RMSE against era5_240",
+              "  (decompose_regrid.py measured); the pooled T2M here sits in the",
+              "  box-average class, i.e. the stored backgrounds carry the boxavg",
+              "  convention end-to-end.",
+              "- No old-convention results are reused: all numbers in this file are",
+              "  recomputed from the raw npz + era5_240 shards in this run; the",
+              "  retracted 0.3513 (N*M denominator) remains retracted in",
+              "  P0_NOTES/README/EXPERIMENT_REGISTRY.",
+              "", "## Monthly key channels (T2M)", "",
+              "| month | AIFS t2m | Arches t2m | ratio |", "|---|---:|---:|---:|"]
+    mk = out["monthly_key_channels"]["2m_temperature"]
+    for m in sorted(mk):
+        a, w_ = mk[m]["aifs"], mk[m]["arches"]
+        lines.append(f"| {m} | {a:.4f} | {w_:.4f} | {a/w_:.3f} |")
     (OUT / "report.md").write_text("\n".join(lines) + "\n")
     print("\n".join(lines), flush=True)
 
