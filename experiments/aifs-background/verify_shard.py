@@ -13,12 +13,12 @@ REF = Path(__file__).resolve().parent / "data/aifs_inputs/2021/2021011500.npy.zs
 
 
 def main():
-    ref = zstd_io.load_npy_zst(REF)
+    ref = zstd_io.load_array(REF)
     failures = []
     for arg in sys.argv[1:]:
         p = Path(arg)
         try:
-            a = zstd_io.load_npy_zst(p)
+            a = zstd_io.load_array(p)
         except Exception as e:  # noqa: BLE001
             failures.append(f"{p.name}: unreadable ({e})")
             continue
