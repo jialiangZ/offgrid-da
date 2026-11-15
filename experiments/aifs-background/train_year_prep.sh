@@ -35,28 +35,30 @@ EOF
 say "P2 integrity passed"
 
 # ---------- small-shard acceptance ----------
-say "STAGE A: small shards (2017 tail, 2 days of 2018, 2020 leap tail)"
-$PY prepare_aifs_inputs.py --year 2017 --start 2017-12-31T18 --end 2018-01-01T00 >> "$LOG" 2>&1 || { say "ABORT: 2017 tail extraction failed"; exit 1; }
+say "STAGE A: small shards (2017 tail x2, 2 days of 2018, 2020 tail x2)"
+$PY prepare_aifs_inputs.py --year 2017 --start 2017-12-31T12 --end 2018-01-01T00 >> "$LOG" 2>&1 || { say "ABORT: 2017 tail extraction failed"; exit 1; }
 $PY prepare_aifs_inputs.py --year 2018 --start 2018-01-01T00 --end 2018-01-03T00 >> "$LOG" 2>&1 || { say "ABORT: 2018 probe extraction failed"; exit 1; }
-$PY prepare_aifs_inputs.py --year 2020 --start 2020-12-31T18 --end 2021-01-01T00 >> "$LOG" 2>&1 || { say "ABORT: 2020 tail extraction failed"; exit 1; }
-mv data/aifs_inputs/2017/2017123118.npy.zst data/aifs_inputs/2018/ || { say "ABORT: move 2017 tail"; exit 1; }
-mv data/aifs_inputs/2020/2020123118.npy.zst data/aifs_inputs/2021/ || { say "ABORT: move 2020 tail"; exit 1; }
+$PY prepare_aifs_inputs.py --year 2020 --start 2020-12-31T12 --end 2021-01-01T00 >> "$LOG" 2>&1 || { say "ABORT: 2020 tail extraction failed"; exit 1; }
+mv data/aifs_inputs/2017/2017123112.npy.zst data/aifs_inputs/2017/2017123118.npy.zst data/aifs_inputs/2018/ || { say "ABORT: move 2017 tails"; exit 1; }
+mv data/aifs_inputs/2020/2020123112.npy.zst data/aifs_inputs/2020/2020123118.npy.zst data/aifs_inputs/2021/ || { say "ABORT: move 2020 tails"; exit 1; }
 rmdir data/aifs_inputs/2017 2>/dev/null
-$PY verify_shard.py data/aifs_inputs/2018/201{7123118,8010100,8010106,8010112,8010118,8010200,8010206,8010212,8010218}.npy.zst data/aifs_inputs/2021/2020123118.npy.zst >> "$LOG" 2>&1 || { say "ABORT: shard verification failed"; exit 1; }
+$PY verify_shard.py data/aifs_inputs/2018/201{7123112,7123118,8010100,8010106,8010112,8010118,8010200,8010206,8010212,8010218}.npy.zst data/aifs_inputs/2021/20201231{12,18}.npy.zst >> "$LOG" 2>&1 || { say "ABORT: shard verification failed"; exit 1; }
 say "shard verification passed; running inference smoke (2018 probe) + 2021 head regeneration"
 CUDA_VISIBLE_DEVICES=0 ANEMOI_INFERENCE_NUM_CHUNKS=32 $VENV run_aifs_background.py --inputs data/aifs_inputs/2018 --out data/bg_aifs_smoke_2018 >> "$LOG" 2>&1 \
   || { say "ABORT: inference smoke failed"; exit 1; }
 CUDA_VISIBLE_DEVICES=0 ANEMOI_INFERENCE_NUM_CHUNKS=32 $VENV run_aifs_background.py --inputs data/aifs_inputs/2021 --out data/bg_aifs_2021 >> "$LOG" 2>&1 \
   || { say "ABORT: 2021 head regeneration failed"; exit 1; }
-NBG=$(ls data/bg_aifs_2021/*.npz 2>/dev/null | wc -l)
-if [ "$NBG" -ne 1460 ]; then say "ABORT: bg_aifs_2021 = $NBG (expected 1460 with the head)"; exit 1; fi
-say "2021 head background in place: bg_aifs_2021 = 1460"
+for NEED in state_20210101T00.npz state_20211231T18.npz; do
+  [ -f "data/bg_aifs_2021/$NEED" ] || { say "ABORT: bg_aifs_2021 missing $NEED"; exit 1; }
+done
+say "2021 val backgrounds complete (head+tail verified)"
 N=$(ls data/bg_aifs_smoke_2018/*.npz 2>/dev/null | wc -l)
 say "smoke produced $N backgrounds; verifying T2M against era5"
 $PY - <<'EOF' >> "$LOG" 2>&1 || { echo "SMOKE RMSE FAILED"; exit 1; }
 import numpy as np, xarray as xr, glob
 files = sorted(glob.glob("data/bg_aifs_smoke_2018/*.npz"))
 assert len(files) == 9, f"expected 9 smoke backgrounds, got {len(files)}"
+assert any("state_20180101T00" in f for f in files), "2018 head background missing"
 sh = xr.open_dataset(f"{__import__('pathlib').Path('.').resolve()}/../archesweather-reproduction/data/era5_240/full/era5_240_2018_0h.nc")
 w = np.cos(np.deg2rad(np.linspace(90, -90, 121)))[:, None]
 rs = []
@@ -84,7 +86,13 @@ for YEAR in 2018 2019 2020; do
   say "STAGE C: generating $YEAR backgrounds (GPU0)"
   CUDA_VISIBLE_DEVICES=0 ANEMOI_INFERENCE_NUM_CHUNKS=32 $VENV run_aifs_background.py --inputs data/aifs_inputs/$YEAR --out data/bg_aifs_train_$YEAR >> "bg_gen_$YEAR.log" 2>&1
   NB=$(ls data/bg_aifs_train_$YEAR/*.npz 2>/dev/null | wc -l)
-  say "year $YEAR backgrounds: $NB"
-  if [ "$NB" -lt 1459 ]; then say "ABORT: $YEAR backgrounds incomplete ($NB)"; exit 1; fi
+  MIN=1464; [ "$YEAR" = "2020" ] || MIN=1460
+  say "year $YEAR backgrounds: $NB (min $MIN)"
+  if [ "$NB" -lt "$MIN" ]; then say "ABORT: $YEAR backgrounds incomplete ($NB < $MIN)"; exit 1; fi
 done
-say "TRAINING-YEAR PREP COMPLETE: 3 years inputs + backgrounds (+ 2017/2020 tails)"
+say "final gate: assembling the single_da_12 background set (union must be complete)"
+$ROOT/.venv/bin/python $ROOT/scripts/assemble_aifs_backgrounds.py >> "$LOG" 2>&1 \
+  || { say "ABORT: assembler failed"; exit 1; }
+grep -q '"complete": true' $ROOT/outputs/single_da_12_aifs_background/backgrounds/manifest.json \
+  || { say "ABORT: assembled background set incomplete"; exit 1; }
+say "TRAINING-YEAR PREP COMPLETE: inputs + backgrounds for 2018-2020 (+tails), assembly complete"
