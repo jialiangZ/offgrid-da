@@ -43,10 +43,14 @@ mv data/aifs_inputs/2017/2017123118.npy.zst data/aifs_inputs/2018/ || { say "ABO
 mv data/aifs_inputs/2020/2020123118.npy.zst data/aifs_inputs/2021/ || { say "ABORT: move 2020 tail"; exit 1; }
 rmdir data/aifs_inputs/2017 2>/dev/null
 $PY verify_shard.py data/aifs_inputs/2018/201{7123118,8010100,8010106,8010112,8010118,8010200,8010206,8010212,8010218}.npy.zst data/aifs_inputs/2021/2020123118.npy.zst >> "$LOG" 2>&1 || { say "ABORT: shard verification failed"; exit 1; }
-say "shard verification passed; running inference smoke (9 shards)"
+say "shard verification passed; running inference smoke (2018 probe) + 2021 head regeneration"
 CUDA_VISIBLE_DEVICES=0 ANEMOI_INFERENCE_NUM_CHUNKS=32 $VENV run_aifs_background.py --inputs data/aifs_inputs/2018 --out data/bg_aifs_smoke_2018 >> "$LOG" 2>&1 \
-  && CUDA_VISIBLE_DEVICES=0 ANEMOI_INFERENCE_NUM_CHUNKS=32 $VENV run_aifs_background.py --inputs data/aifs_inputs/2021 --out data/bg_aifs_smoke_2021head --limit 1 >> "$LOG" 2>&1 \
   || { say "ABORT: inference smoke failed"; exit 1; }
+CUDA_VISIBLE_DEVICES=0 ANEMOI_INFERENCE_NUM_CHUNKS=32 $VENV run_aifs_background.py --inputs data/aifs_inputs/2021 --out data/bg_aifs_2021 >> "$LOG" 2>&1 \
+  || { say "ABORT: 2021 head regeneration failed"; exit 1; }
+NBG=$(ls data/bg_aifs_2021/*.npz 2>/dev/null | wc -l)
+if [ "$NBG" -ne 1460 ]; then say "ABORT: bg_aifs_2021 = $NBG (expected 1460 with the head)"; exit 1; fi
+say "2021 head background in place: bg_aifs_2021 = 1460"
 N=$(ls data/bg_aifs_smoke_2018/*.npz 2>/dev/null | wc -l)
 say "smoke produced $N backgrounds; verifying T2M against era5"
 $PY - <<'EOF' >> "$LOG" 2>&1 || { echo "SMOKE RMSE FAILED"; exit 1; }
