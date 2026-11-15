@@ -36,7 +36,7 @@ def main():
         t0 = time.time()
         ds = LazyArchesDataset(ROOT, split)
         n = len(ds)
-        done = sum(1 for p in ds.cache_paths if p.is_file())
+        done = sum(1 for i in range(n) if ds.sample_path(i).is_file())
         print(f"{split}: {n} samples, {done} already cached, sig={ds.signature[:12]}", flush=True)
         if done == n:
             print(f"{split}: complete, skipping", flush=True)
@@ -49,7 +49,7 @@ def main():
             if (i + 1) % 200 == 0:
                 r = (i + 1 - done) / (time.time() - t0)
                 print(f"{split}: {i+1}/{n} (+{r*3600:.0f}/h fresh)", flush=True)
-        final = sum(1 for p in ds.cache_paths if p.is_file())
+        final = sum(1 for i in range(n) if ds.sample_path(i).is_file())
         print(f"{split}: DONE {final}/{n} in {(time.time()-t0)/60:.1f} min", flush=True)
         assert final == n, f"{split} cache incomplete: {final}/{n}"
     print("WARMUP COMPLETE", flush=True)
