@@ -13,13 +13,17 @@ LOG=train_year_prep.log
 say() { echo "[$(date '+%m-%d %H:%M:%S')] $*" | tee -a "$LOG" >&2; }  # stderr: never captured by $(...) callers
 
 # ---------- GPU selection (shared machine: other users' jobs appear/grow anytime) ----------
-GPU_MIN_FREE_MIB=${GPU_MIN_FREE_MIB:-21000}  # MEASURED: one inference step allocates 18.34 GiB torch
-                                             # + a 2.07 GiB block => ~20.4 GiB process peak.
-                                             # NUM_CHUNKS does NOT lower this (tested 2/4/8/16/32/64/
-                                             # 128/256: all peak at 18.3-19.3 GiB and then OOM).
-                                             # Consequence: on a 24 GiB card that already hosts a
-                                             # ~3.8 GiB neighbour job (~20.2 GiB free) AIFS inference
-                                             # CANNOT fit -> pick_gpu waits for a genuinely free card.
+GPU_MIN_FREE_MIB=${GPU_MIN_FREE_MIB:-21000}  # MEASURED: one inference step holds 18.34 GiB of torch
+                                             # allocations and then asks for a further 2.07 GiB
+                                             # block => ~20.4 GiB process peak (20890 MiB), so a
+                                             # card needs >=21 GiB free.
+                                             # ANEMOI_INFERENCE_NUM_CHUNKS plateaus at this level:
+                                             # 2/4/8/16/32/64/128/256 all peak at 18.3-19.3 GiB
+                                             # (32 is not special, but unchunked C=1 is not viable).
+                                             # Consequence on this host: cards carrying a ~3.8 GiB
+                                             # neighbour job show only ~20.2 GiB free -> AIFS
+                                             # inference cannot fit -> pick_gpu waits for a card
+                                             # that is genuinely free.
 GPU_WAIT_TRIES=${GPU_WAIT_TRIES:-180}        # poll up to 3 h for a free card before giving up
 pick_gpu() {  # pick_gpu [tries] -> echoes a free device index; polls while cards are busy
   local tries=${1:-30} idx
@@ -33,12 +37,12 @@ pick_gpu() {  # pick_gpu [tries] -> echoes a free device index; polls while card
   return 1
 }
 
-run_inference() {  # run_inference <inputs> <out> <tag> [logfile]; resumes via skip-if-exists
-  local inputs=$1 out=$2 tag=$3 logf=${4:-$LOG} gpu rc attempt
+run_inference() {  # run_inference <inputs> <out> <tag> [logfile] [wait_tries]; skip-if-exists resume
+  local inputs=$1 out=$2 tag=$3 logf=${4:-$LOG} wait=${5:-$GPU_WAIT_TRIES} gpu rc attempt
   for attempt in 1 2 3; do
-    gpu=$(pick_gpu "$GPU_WAIT_TRIES") || { say "$tag: ABORT - no GPU with >=${GPU_MIN_FREE_MIB}MiB free after ${GPU_WAIT_TRIES}min"; return 2; }
+    gpu=$(pick_gpu "$wait") || { say "$tag: no GPU with >=${GPU_MIN_FREE_MIB}MiB free (waited ${wait}min)"; return 2; }
     say "$tag: attempt $attempt on cuda:$gpu"
-    CUDA_VISIBLE_DEVICES=$gpu ANEMOI_INFERENCE_NUM_CHUNKS=32 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True $VENV run_aifs_background.py \
+    CUDA_VISIBLE_DEVICES=$gpu ANEMOI_INFERENCE_NUM_CHUNKS=32 $VENV run_aifs_background.py \
       --inputs "$inputs" --out "$out" >> "$logf" 2>&1
     rc=$?
     [ $rc -eq 0 ] && return 0
@@ -46,6 +50,28 @@ run_inference() {  # run_inference <inputs> <out> <tag> [logfile]; resumes via s
     sleep 120
   done
   return 1
+}
+
+verify_smoke_rmse() {
+$PY - <<'EOF' >> "$LOG" 2>&1 || { say "ABORT: smoke T2M out of boxavg class"; return 1; }
+import numpy as np, xarray as xr, glob
+files = sorted(glob.glob("data/bg_aifs_smoke_2018/*.npz"))
+assert len(files) == 9, f"expected 9 smoke backgrounds, got {len(files)}"
+assert any("state_20180101T00" in f for f in files), "2018 head background missing"
+sh = xr.open_dataset(f"{__import__('pathlib').Path('.').resolve()}/../archesweather-reproduction/data/era5_240/full/era5_240_2018_0h.nc")
+w = np.cos(np.deg2rad(np.linspace(90, -90, 121)))[:, None]
+rs = []
+for f in files:
+    stem = f.split("/")[-1].split(".")[0].replace("state_", "")
+    t = np.datetime64(f"{stem[:4]}-{stem[4:6]}-{stem[6:8]}T{stem[9:11]}:00:00.000000000")
+    d = np.load(f)
+    hh = int(stem[9:11]); shard = xr.open_dataset(f"../archesweather-reproduction/data/era5_240/full/era5_240_2018_{hh}h.nc") if hh else sh
+    ref = np.flipud(shard.sel(time=t)["2m_temperature"].transpose("latitude", "longitude").values)
+    e = d["surface"][2, 0] - ref
+    rs.append(float(np.sqrt((e**2 * w).sum() / (w.sum() * 240))))
+print("smoke T2M RMSE:", [round(x, 4) for x in rs])
+assert np.mean(rs) < 0.65, f"smoke T2M {np.mean(rs):.4f} out of boxavg class (<0.65)"
+EOF
 }
 
 # ---------- storage budget ----------
@@ -80,36 +106,32 @@ mv data/aifs_inputs/2020/2020123112.npy.zst data/aifs_inputs/2020/2020123118.npy
 rmdir data/aifs_inputs/2017 2>/dev/null
 $PY verify_shard.py data/aifs_inputs/2018/201{7123112,7123118,8010100,8010106,8010112,8010118,8010200,8010206,8010212,8010218}.npy.zst data/aifs_inputs/2021/20201231{12,18}.npy.zst >> "$LOG" 2>&1 || { say "ABORT: shard verification failed"; exit 1; }
 say "shard verification passed; running inference smoke (2018 probe) + 2021 head regeneration"
-run_inference data/aifs_inputs/2018 data/bg_aifs_smoke_2018 smoke \
-  || { say "ABORT: inference smoke failed"; exit 1; }
-run_inference data/aifs_inputs/2021 data/bg_aifs_2021 "2021-head" \
-  || { say "ABORT: 2021 head regeneration failed"; exit 1; }
-for NEED in state_20210101T00.npz state_20211231T18.npz; do
-  [ -f "data/bg_aifs_2021/$NEED" ] || { say "ABORT: bg_aifs_2021 missing $NEED"; exit 1; }
-done
-say "2021 val backgrounds complete (head+tail verified)"
+# Data acceptance is independent of GPU availability (shards already verified above).
+# On a busy shared host, defer the GPU smoke instead of stalling the network-bound
+# extraction: it must still pass before the first background generation (see below).
+SMOKE_DEFERRED=0
+if run_inference data/aifs_inputs/2018 data/bg_aifs_smoke_2018 smoke "$LOG" 3; then
+  run_inference data/aifs_inputs/2021 data/bg_aifs_2021 "2021-head" \
+    || { say "ABORT: 2021 head regeneration failed"; exit 1; }
+else
+  say "NOTE: GPU busy - inference smoke deferred; extraction proceeds, smoke gates backgrounds"
+  SMOKE_DEFERRED=1
+fi
+if [ "$SMOKE_DEFERRED" = "0" ]; then
+  for NEED in state_20210101T00.npz state_20211231T18.npz; do
+    [ -f "data/bg_aifs_2021/$NEED" ] || { say "ABORT: bg_aifs_2021 missing $NEED"; exit 1; }
+  done
+  say "2021 val backgrounds complete (head+tail verified)"
+fi
 N=$(ls data/bg_aifs_smoke_2018/*.npz 2>/dev/null | wc -l)
-say "smoke produced $N backgrounds; verifying T2M against era5"
-$PY - <<'EOF' >> "$LOG" 2>&1 || { echo "SMOKE RMSE FAILED"; exit 1; }
-import numpy as np, xarray as xr, glob
-files = sorted(glob.glob("data/bg_aifs_smoke_2018/*.npz"))
-assert len(files) == 9, f"expected 9 smoke backgrounds, got {len(files)}"
-assert any("state_20180101T00" in f for f in files), "2018 head background missing"
-sh = xr.open_dataset(f"{__import__('pathlib').Path('.').resolve()}/../archesweather-reproduction/data/era5_240/full/era5_240_2018_0h.nc")
-w = np.cos(np.deg2rad(np.linspace(90, -90, 121)))[:, None]
-rs = []
-for f in files:
-    stem = f.split("/")[-1].split(".")[0].replace("state_", "")
-    t = np.datetime64(f"{stem[:4]}-{stem[4:6]}-{stem[6:8]}T{stem[9:11]}:00:00.000000000")
-    d = np.load(f)
-    hh = int(stem[9:11]); shard = xr.open_dataset(f"../archesweather-reproduction/data/era5_240/full/era5_240_2018_{hh}h.nc") if hh else sh
-    ref = np.flipud(shard.sel(time=t)["2m_temperature"].transpose("latitude", "longitude").values)
-    e = d["surface"][2, 0] - ref
-    rs.append(float(np.sqrt((e**2 * w).sum() / (w.sum() * 240))))
-print("smoke T2M RMSE:", [round(x, 4) for x in rs])
-assert np.mean(rs) < 0.65, f"smoke T2M {np.mean(rs):.4f} out of boxavg class (<0.65)"
-EOF
-say "STAGE A PASSED (small-shard acceptance)"
+say "smoke produced $N backgrounds"
+if [ "$SMOKE_DEFERRED" = "1" ]; then
+  say "STAGE A data acceptance passed (GPU smoke deferred)"
+else
+say "verifying smoke T2M against era5"
+verify_smoke_rmse || exit 1
+  say "STAGE A PASSED (small-shard acceptance, incl GPU smoke)"
+fi
 
 # ---------- continuous extraction ----------
 # Head backgrounds for year Y are produced from Y-1 Dec-31 12Z/18Z inputs, which
@@ -132,6 +154,19 @@ for YEAR in 2018 2019 2020; do
   if [ $RC -ne 0 ] || [ "$N" -lt 1460 ]; then say "ABORT: $YEAR incomplete ($N)"; exit 1; fi
   if [ "$YEAR" != "2018" ]; then
     link_prev_tails $((YEAR - 1)) "$YEAR" || { say "ABORT: $YEAR head inputs"; exit 1; }
+  fi
+  if [ "$SMOKE_DEFERRED" = "1" ]; then
+    say "GPU smoke was deferred; waiting for a free card now (gates all backgrounds)"
+    run_inference data/aifs_inputs/2018 data/bg_aifs_smoke_2018 smoke \
+      || { say "ABORT: deferred inference smoke failed"; exit 1; }
+    run_inference data/aifs_inputs/2021 data/bg_aifs_2021 "2021-head" \
+      || { say "ABORT: 2021 head regeneration failed"; exit 1; }
+    verify_smoke_rmse || exit 1
+    for NEED in state_20210101T00.npz state_20211231T18.npz; do
+      [ -f "data/bg_aifs_2021/$NEED" ] || { say "ABORT: bg_aifs_2021 missing $NEED"; exit 1; }
+    done
+    say "deferred GPU smoke + 2021 head/tail verified"
+    SMOKE_DEFERRED=0
   fi
   say "STAGE C: generating $YEAR backgrounds (device picked at runtime)"
   run_inference data/aifs_inputs/$YEAR data/bg_aifs_train_$YEAR "bg-$YEAR" "bg_gen_$YEAR.log" \
