@@ -107,11 +107,21 @@ mv data/aifs_inputs/2020/2020123112.npy.zst data/aifs_inputs/2020/2020123118.npy
 rmdir data/aifs_inputs/2017 2>/dev/null
 $PY verify_shard.py data/aifs_inputs/2018/201{7123112,7123118,8010100,8010106,8010112,8010118,8010200,8010206,8010212,8010218}.npy.zst data/aifs_inputs/2021/20201231{12,18}.npy.zst >> "$LOG" 2>&1 || { say "ABORT: shard verification failed"; exit 1; }
 say "shard verification passed; running inference smoke (2018 probe) + 2021 head regeneration"
+# Bounded smoke inputs: exactly the 10 probe stamps. The live 2018 input dir grows
+# during Stage B, and run_aifs_background iterates EVERY shard in --inputs, so an
+# unbounded smoke would generate the whole partial year into the smoke dir and
+# then fail verify_smoke_rmse's 9-file assertion.
+SMOKE_IN=data/aifs_inputs_smoke
+mkdir -p "$SMOKE_IN"
+for S in 2017123112 2017123118 2018010100 2018010106 2018010112 2018010118 2018010200 2018010206 2018010212 2018010218; do
+  [ -f "$SMOKE_IN/$S.npy.zst" ] || ln "data/aifs_inputs/2018/$S.npy.zst" "$SMOKE_IN/$S.npy.zst" \
+    || { say "ABORT: probe shard $S missing from 2018 inputs"; exit 1; }
+done
 # Data acceptance is independent of GPU availability (shards already verified above).
 # On a busy shared host, defer the GPU smoke instead of stalling the network-bound
 # extraction: it must still pass before the first background generation (see below).
 SMOKE_DEFERRED=0
-if run_inference data/aifs_inputs/2018 data/bg_aifs_smoke_2018 smoke "$LOG" 3; then
+if run_inference "$SMOKE_IN" data/bg_aifs_smoke_2018 smoke "$LOG" 3; then
   run_inference data/aifs_inputs/2021 data/bg_aifs_2021 "2021-head" \
     || { say "ABORT: 2021 head regeneration failed"; exit 1; }
 else
@@ -159,11 +169,18 @@ for YEAR in 2018 2019 2020; do
   fi
 done
 say "EXTRACTION PHASE COMPLETE (2018-2020)"
+# GPU budget on this host is capped (other work may hold cards). EXTRACT_ONLY=1
+# stops here; combine with GPU_MIN_FREE_MIB=999999 to also ensure the Stage A
+# smoke defers instead of touching a card that belongs to someone else.
+if [ "${EXTRACT_ONLY:-0}" = "1" ]; then
+  say "EXTRACT_ONLY set: stopping before the GPU phase (backgrounds not generated)"
+  exit 0
+fi
 
 # ---------- background generation (GPU phase) ----------
 if [ "$SMOKE_DEFERRED" = "1" ]; then
   say "GPU smoke was deferred; it must pass before any background is generated"
-  run_inference data/aifs_inputs/2018 data/bg_aifs_smoke_2018 smoke \
+  run_inference "$SMOKE_IN" data/bg_aifs_smoke_2018 smoke \
     || { say "ABORT: deferred inference smoke failed"; exit 1; }
   run_inference data/aifs_inputs/2021 data/bg_aifs_2021 "2021-head" \
     || { say "ABORT: 2021 head regeneration failed"; exit 1; }

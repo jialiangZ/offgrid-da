@@ -16,6 +16,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--min-free-mib", type=int, default=6000)
     ap.add_argument("--prefer", type=int, default=None, help="tie-break preference (still requires the free-memory floor)")
+    ap.add_argument("--only", type=int, default=None,
+                    help="consider only this device index (lets a caller pin a card, e.g. so a "
+                         "background generator never takes a card another job is using)")
     a = ap.parse_args()
     try:
         out = subprocess.check_output(
@@ -29,6 +32,11 @@ def main():
         idx, free = (int(x.strip()) for x in line.split(","))
         gpus.append((idx, free))
     ok = [(i, f) for i, f in gpus if f >= a.min_free_mib]
+    if a.only is not None:
+        ok = [(i, f) for i, f in ok if i == a.only]
+        if not ok:
+            print("pick_gpu: device %d is not free enough; state: %s" % (a.only, gpus), file=sys.stderr)
+            return 1
     if not ok:
         print("pick_gpu: no GPU with >= %d MiB free; state: %s" % (a.min_free_mib, gpus), file=sys.stderr)
         return 1
