@@ -20,7 +20,7 @@ run_arm() {  # run_arm <kind> <seed> <gpu>
     if [ -f "$out/best.pt" ] && [ ! -f "$out/result.json" ]; then
       extra=(--resume "$out/best.pt")
     fi
-    say "formal $kind s$seed attempt $attempt gpu$gpu resume=${extra[1]:no}"
+    say "formal $kind s$seed attempt $attempt gpu$gpu resume=${extra[1]:-no}"
     $PY scripts/run_single_da_12.py --kind "$kind" --seed "$seed" --formal --gpu "$gpu" \
       ${extra+"${extra[@]}"} > "$EXP/formal_${kind}_s$seed.log" 2>&1
     rc=$?
