@@ -34,6 +34,8 @@ def main():
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--formal", action="store_true")
     ap.add_argument("--gpu", type=int, default=0)
+    ap.add_argument("--resume", type=Path, default=None,
+                    help="pass-through to the trainer: resume from a checkpoint of this arm")
     args = ap.parse_args()
 
     bg_manifest = json.loads((EXP / "backgrounds/manifest.json").read_text())
@@ -82,6 +84,8 @@ def main():
            "--preparation", str(out_root / "preparation.json"),
            "--output", str(target), "--kind", args.kind,
            "--experiment", str(EXP)] + (["--trial"] if kind == "trial" else [])
+    if args.resume is not None:
+        cmd += ["--resume", str(args.resume)]
     env = dict(os.environ, CUDA_VISIBLE_DEVICES=str(args.gpu))
     print("running:", " ".join(cmd), flush=True)
     rc = subprocess.call(cmd, env=env)
