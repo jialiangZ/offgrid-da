@@ -62,9 +62,18 @@ def main():
     samples = []
     files = sorted([f for d in dirs for f in d.glob("state_*.npz")])
     assert files, "no state_*.npz in sources"
+    # Each per-year source dir also generates the NEXT year's Jan-1 head, so a
+    # year-boundary stamp can appear in two adjacent dirs. The two runs differ
+    # bitwise (GPU reduction order; equivalent numerically), so keep exactly ONE
+    # record per stamp: the first occurrence, which is also the version already
+    # hardlinked into backgrounds/ (the resume path below verifies its sha).
+    seen = set()
     for n, f in enumerate(files):
         stamp = f.name.split(".")[0].replace("state_", "")
         valid = f"{stamp[:4]}-{stamp[4:6]}-{stamp[6:8]}T{stamp[9:11]}:00:00Z"
+        if valid in seen:
+            continue
+        seen.add(valid)
         dest = EXP / f"background_{stamp}.npz"
         if valid in done and dest.exists():
             rec = done[valid]
@@ -83,6 +92,11 @@ def main():
         if (n + 1) % 500 == 0:
             print(f"{n + 1}/{len(files)}", flush=True)
     samples.sort(key=lambda s: s["valid_utc"])
+    # Restrict to the declared interval: sources may carry one extra head beyond
+    # VAL_INTERVAL[1] (e.g. the 2022-01-01T00 lead of the 2021 dir). The control
+    # manifest has exactly 5844 samples; parity here keeps downstream strict
+    # index checks (prepare_full_state_input) meaningful.
+    samples = [s for s in samples if TRAIN_INTERVAL[0] <= s["valid_utc"] < VAL_INTERVAL[1]]
     times = [np.datetime64(s["valid_utc"].replace("Z", ""), "s") for s in samples]
     expected = np.arange(np.datetime64(TRAIN_INTERVAL[0].replace("Z", ""), "s"),
                          np.datetime64(VAL_INTERVAL[1].replace("Z", ""), "s"),
