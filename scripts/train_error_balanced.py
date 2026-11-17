@@ -6,11 +6,23 @@ import torch
 ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT/'src'),str(ROOT/'scripts')]
 import error_balanced_trainer as trainer
+import run_full_update_v1
 from run_full_update_v1 import Data
 from offgrid_da.data.multivar_dataset import multivar_collate
 from offgrid_da.data.full_state_data import CHANNELS,digest
 from offgrid_da.models import CrossAttentionAnalysisModel
 from error_balanced import balanced_loss,latitude_weights,metrics
+
+# Module level (NOT inside main): DataLoader workers use the 'spawn' start
+# method, which pickles the dataset class by reference - a class defined in a
+# function scope can never be resolved in the child process. The experiment
+# path is injected via the _EXPERIMENT global before any loader is built.
+_EXPERIMENT=None
+class ExpData(Data):
+    def __init__(self,root,split):
+        from offgrid_da.data.multivar_dataset import MultivarMetarDataset
+        MultivarMetarDataset.__init__(self,root,split,experiment=_EXPERIMENT)
+        self.signature=hashlib.sha256((self.signature+Path(run_full_update_v1.__file__).read_text()).encode()).hexdigest()
 
 def main():
     stats_path=ROOT/'outputs/single_da_09_full82_loss_balanced/loss_statistics.json'
@@ -20,12 +32,7 @@ def main():
     experiment=None
     if '--experiment' in sys.argv:
         i=sys.argv.index('--experiment');experiment=Path(sys.argv[i+1]);del sys.argv[i:i+2]
-        import run_full_update_v1 as _rfu
-        class ExpData(_rfu.Data):
-            def __init__(self,root,split):
-                from offgrid_da.data.multivar_dataset import MultivarMetarDataset
-                MultivarMetarDataset.__init__(self,root,split,experiment=experiment)
-                self.signature=__import__('hashlib').sha256((self.signature+Path(_rfu.__file__).read_text()).encode()).hexdigest()
+        globals()['_EXPERIMENT']=experiment
         trainer.LazyArchesDataset=ExpData
     else:
         trainer.LazyArchesDataset=Data
